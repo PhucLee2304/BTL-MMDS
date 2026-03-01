@@ -1,0 +1,80 @@
+FROM ubuntu:22.04
+
+LABEL description="Hadoop 3.3.6 + Spark 3.5.0 - WORKER node"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    openjdk-11-jdk \
+    openssh-server openssh-client \
+    wget curl vim nano net-tools iputils-ping \
+    python3 python3-pip python3-venv ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV PATH=$PATH:$JAVA_HOME/bin
+ENV HDFS_DATANODE_USER=root
+ENV YARN_NODEMANAGER_USER=root
+
+ENV HADOOP_VERSION=3.3.6
+ENV HADOOP_HOME=/opt/hadoop
+ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+
+RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
+    "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+    || wget -q --timeout=60 --tries=5 --waitretry=10 \
+    "https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+    && tar -xzf hadoop-${HADOOP_VERSION}.tar.gz \
+    && mv hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
+    && rm hadoop-${HADOOP_VERSION}.tar.gz
+
+ENV SPARK_VERSION=3.5.0
+ENV SPARK_HOME=/opt/spark
+ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+ENV PYSPARK_PYTHON=python3
+
+RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
+    "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
+    || wget -q --timeout=60 --tries=5 --waitretry=10 \
+    "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
+    && tar -xzf spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && mv spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
+    && rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
+    "https://repos.spark-packages.org/graphframes/graphframes/0.8.3-spark3.5-s_2.12/graphframes-0.8.3-spark3.5-s_2.12.jar" \
+    -O ${SPARK_HOME}/jars/graphframes-0.8.3-spark3.5-s_2.12.jar
+
+RUN pip3 install --no-cache-dir --timeout=120 \
+    pyspark==3.5.0 numpy pandas graphframes
+
+RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa && \
+    cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys && \
+    chmod 0600 ~/.ssh/authorized_keys
+RUN echo "Host *" >> /etc/ssh/ssh_config && \
+    echo "   StrictHostKeyChecking no" >> /etc/ssh/ssh_config && \
+    echo "   UserKnownHostsFile=/dev/null" >> /etc/ssh/ssh_config
+
+RUN mkdir -p /hadoop_tmp /hadoop_data/datanode
+RUN mkdir -p /workspace
+
+COPY config/hadoop/hadoop-env.sh ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
+COPY config/hadoop/core-site.xml ${HADOOP_HOME}/etc/hadoop/core-site.xml
+COPY config/hadoop/hdfs-site.xml ${HADOOP_HOME}/etc/hadoop/hdfs-site.xml
+COPY config/hadoop/yarn-site.xml ${HADOOP_HOME}/etc/hadoop/yarn-site.xml
+COPY config/hadoop/mapred-site.xml ${HADOOP_HOME}/etc/hadoop/mapred-site.xml
+COPY config/hadoop/workers ${HADOOP_HOME}/etc/hadoop/workers
+RUN chmod 644 ${HADOOP_HOME}/etc/hadoop/*.xml ${HADOOP_HOME}/etc/hadoop/workers && \
+    chmod 755 ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
+
+COPY config/spark/spark-env.sh ${SPARK_HOME}/conf/spark-env.sh
+RUN chmod 755 ${SPARK_HOME}/conf/spark-env.sh
+
+EXPOSE 9864 9866 9867 8081 8042
+
+WORKDIR /workspace
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["bash"]
