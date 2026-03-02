@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  master:
+    build:
+      context: .
+      dockerfile: Dockerfile.master
+    image: taxi-mining-master
+    container_name: taxi-mining-master
+    hostname: master
+    environment:
+      - NODE_TYPE=master
+      - HDFS_NAMENODE_USER=root
+      - HDFS_DATANODE_USER=root
+      - HDFS_SECONDARYNAMENODE_USER=root
+      - YARN_RESOURCEMANAGER_USER=root
+      - YARN_NODEMANAGER_USER=root
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+      - "8088:8088"
+      - "8080:8080"
+      - "18080:18080"
+      - "4040:4040"
+      - "8888:8888"
+    volumes:
+      - hadoop_namenode:/hadoop_data/namenode
+      - ./config:/workspace/config
+    networks:
+      - hadoop_network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  worker1:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: taxi-mining-worker        # <- worker1 và worker2 dùng chung image này
+    container_name: taxi-mining-worker1
+    hostname: worker1
+    environment:
+      - NODE_TYPE=worker
+      - HDFS_DATANODE_USER=root
+      - YARN_NODEMANAGER_USER=root
+    depends_on:
+      - master
+    volumes:
+      - hadoop_datanode1:/hadoop_data/datanode
+    networks:
+      - hadoop_network
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+
+  worker2:
+    image: taxi-mining-worker        # <- dùng lại image đã build từ worker1, KHÔNG build lại
+    container_name: taxi-mining-worker2
+    hostname: worker2
+    environment:
+      - NODE_TYPE=worker
+      - HDFS_DATANODE_USER=root
+      - YARN_NODEMANAGER_USER=root
+    depends_on:
+      - master
+      - worker1
+    volumes:
+      - hadoop_datanode2:/hadoop_data/datanode
+    networks:
+      - hadoop_network
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode1:
+  hadoop_datanode2:
+
+networks:
+  hadoop_network:
+    driver: bridge
