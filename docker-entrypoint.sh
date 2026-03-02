@@ -51,9 +51,9 @@ if [ "$NODE_ROLE" = "master" ]; then
     $HADOOP_HOME/bin/hdfs --daemon start secondarynamenode || true
 
     # Start DataNode trên master
-    echo ">>> [MASTER] Starting DataNode on master..."
-    $HADOOP_HOME/bin/hdfs --daemon start datanode
-    sleep 5
+    # echo ">>> [MASTER] Starting DataNode on master..."
+    # $HADOOP_HOME/bin/hdfs --daemon start datanode
+    # sleep 5
 
     # Tạo thư mục HDFS
     echo ">>> [MASTER] Creating HDFS directories..."
@@ -70,9 +70,9 @@ if [ "$NODE_ROLE" = "master" ]; then
     sleep 3
 
     # Start NodeManager trên master
-    echo ">>> [MASTER] Starting NodeManager on master..."
-    $HADOOP_HOME/bin/yarn --daemon start nodemanager
-    sleep 2
+    # echo ">>> [MASTER] Starting NodeManager on master..."
+    # $HADOOP_HOME/bin/yarn --daemon start nodemanager
+    # sleep 2
 
     # Start Spark Master
     echo ">>> [MASTER] Starting Spark Master..."
