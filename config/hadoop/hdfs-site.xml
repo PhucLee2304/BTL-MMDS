@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <property>
+        <name>dfs.replication</name>
+        <value>1</value>
+        <description>Default block replication</description>
+    </property>
+    
+    <property>
+        <name>dfs.namenode.name.dir</name>
+        <value>/hadoop_data/namenode</value>
+        <description>NameNode storage directory</description>
+    </property>
+    
+    <property>
+        <name>dfs.datanode.data.dir</name>
+        <value>/hadoop_data/datanode</value>
+        <description>DataNode storage directory</description>
+    </property>
+    
+    <property>
+        <name>dfs.blocksize</name>
+        <value>134217728</value>
+        <description>Block size (128MB)</description>
+    </property>
+    
+    <property>
+        <name>dfs.namenode.handler.count</name>
+        <value>10</value>
+        <description>NameNode RPC threads</description>
+    </property>
+    
+    <property>
+        <name>dfs.datanode.handler.count</name>
+        <value>10</value>
+        <description>DataNode RPC threads</description>
+    </property>
+    
+    <property>
+        <name>dfs.namenode.http-address</name>
+        <value>master:9870</value>
+        <description>HTTP address of the NameNode</description>
+    </property>
+    
+    <property>
+        <name>dfs.namenode.secondary.http-address</name>
+        <value>master:9868</value>
+        <description>HTTP address of the Secondary NameNode</description>
+    </property>
+    <property>
+        <name>dfs.datanode.hostname</name>
+        <value></value>
+    </property>
+</configuration>
