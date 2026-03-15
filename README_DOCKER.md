@@ -70,7 +70,12 @@ Mở trình duyệt và truy cập:
 
 ```bash
 # Vào container master
-docker exec -it taxi-mining-master bash
+winpty docker exec -it master bash
+
+jps
+hdfs dfsadmin -report
+yarn node -list
+spark-submit --master spark://master:7077 --class org.apache.spark.examples.SparkPi $SPARK_HOME/examples/jars/spark-examples_2.12-3.5.0.jar 10
 
 # Test HDFS
 hdfs dfs -mkdir /test

@@ -1,12 +1,12 @@
-version: '3.8'
+name: mmds
 
 services:
   master:
     build:
       context: .
       dockerfile: Dockerfile.master
-    image: taxi-mining-master
-    container_name: taxi-mining-master
+    image: master
+    container_name: master
     hostname: master
     environment:
       - NODE_TYPE=master
@@ -26,54 +26,58 @@ services:
     volumes:
       - hadoop_namenode:/hadoop_data/namenode
       - ./config:/workspace/config
+      - ./code:/workspace/code
+      - ./data:/workspace/data
     networks:
       - hadoop_network
-    deploy:
-      resources:
-        limits:
-          memory: 4G
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 4G
+    mem_limit: 4g
 
   worker1:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    image: taxi-mining-worker        # <- worker1 và worker2 dùng chung image này
-    container_name: taxi-mining-worker1
+    image: worker:latest
+    container_name: worker1
     hostname: worker1
+    depends_on:
+      - master
     environment:
       - NODE_TYPE=worker
       - HDFS_DATANODE_USER=root
       - YARN_NODEMANAGER_USER=root
-    depends_on:
-      - master
     volumes:
       - hadoop_datanode1:/hadoop_data/datanode
     networks:
       - hadoop_network
-    deploy:
-      resources:
-        limits:
-          memory: 3G
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 3G
+    mem_limit: 3g
 
   worker2:
-    image: taxi-mining-worker        # <- dùng lại image đã build từ worker1, KHÔNG build lại
-    container_name: taxi-mining-worker2
+    image: worker:latest
+    container_name: worker2
     hostname: worker2
+    depends_on:
+      - master
     environment:
       - NODE_TYPE=worker
       - HDFS_DATANODE_USER=root
       - YARN_NODEMANAGER_USER=root
-    depends_on:
-      - master
-      - worker1
     volumes:
       - hadoop_datanode2:/hadoop_data/datanode
     networks:
       - hadoop_network
-    deploy:
-      resources:
-        limits:
-          memory: 3G
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 3G
+    mem_limit: 3g
 
 volumes:
   hadoop_namenode:
