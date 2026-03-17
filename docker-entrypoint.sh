@@ -10,6 +10,10 @@ export HDFS_SECONDARYNAMENODE_USER=root
 export YARN_RESOURCEMANAGER_USER=root
 export YARN_NODEMANAGER_USER=root
 
+# Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
+sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
+sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true
+
 echo "========================================="
 echo "Starting NYC Taxi Mining Container"
 echo "Role: ${NODE_TYPE} / Hostname: $(hostname)"
@@ -45,12 +49,25 @@ if [ "$NODE_ROLE" = "master" ]; then
 
     $HADOOP_HOME/bin/hdfs --daemon start secondarynamenode || true
 
+    echo ">>> [MASTER] Waiting for NameNode to leave safe mode..."
+    for i in $(seq 1 30); do
+        SAFE_MODE_STATE=$($HADOOP_HOME/bin/hdfs dfsadmin -safemode get 2>/dev/null || true)
+        if echo "$SAFE_MODE_STATE" | grep -qi "OFF"; then
+            echo ">>> [MASTER] NameNode safe mode is OFF."
+            break
+        fi
+        echo "    Safe mode still ON. Retrying in 3s... ($i/30)"
+        sleep 3
+    done
+
     echo ">>> [MASTER] Preparing HDFS filesystem..."
     $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/raw_data
     $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/results
     $HADOOP_HOME/bin/hdfs dfs -mkdir -p /spark-logs
+    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /tmp/spark-events
     $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /user
     $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /spark-logs
+    $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /tmp/spark-events
 
     echo ">>> [MASTER] Starting YARN ResourceManager..."
     $HADOOP_HOME/bin/yarn --daemon start resourcemanager

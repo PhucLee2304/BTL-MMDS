@@ -1,188 +1,179 @@
-## BUILD VÀ KHỞI ĐỘNG CLUSTER
+# Hướng dẫn Docker Cluster
 
-### 1. Clone project
+Tài liệu này mô tả cách build và chạy Hadoop + Spark cluster trong project.
 
-```bash
-cd <your prj folder>
-```
+## 1. Yêu cầu
 
-### 2. Build Docker images
+- Docker Desktop (Windows) hoặc Docker Engine (Linux)
+- Docker Compose V2 (lệnh docker compose)
+- GNU Make (nếu muốn chạy lệnh make)
 
-```bash
-cd docker
+## 2. Chuẩn bị artifact local để build nhanh
 
-# Build images
-docker-compose build
+Mục tiêu: tải sẵn Hadoop/Spark archives và GraphFrames JAR về máy local trước, để build lại nhanh hơn khi gặp lỗi hoặc cần rebuild nhiều lần.
 
-# Xem images đã build
-docker images | grep taxi-mining
-```
-
-### 3. Khởi động cluster
+Chạy bằng make:
 
 ```bash
-# Khởi động tất cả services (detached mode)
-docker-compose up -d
-
-# Xem logs
-docker-compose logs -f
-
-# Xem logs của từng service
-docker-compose logs -f master
-docker-compose logs -f worker1
+make prep-assets-local
 ```
 
-### 4. Kiểm tra containers đang chạy
+Git Bash (không cần make):
 
 ```bash
-# List containers
-docker-compose ps
-
-# Kết quả mong đợi:
-# NAME                  STATUS         PORTS
-# taxi-mining-master    Up 2 minutes   0.0.0.0:8088->8088/tcp, ...
-# taxi-mining-worker1   Up 2 minutes   
-# taxi-mining-worker2   Up 2 minutes   
-
-# nếu cần rebuilt
-docker-compose down -v
-# Xóa images cũ
-docker rmi docker-master docker-worker1 taxi-mining-master taxi-mining-worker 2>nul
-
+bash .docker-cache/prefetch_docker_assets.sh
 ```
 
----
+Sau khi xong, dữ liệu cache nằm ở:
 
-## KIỂM TRA HỆ THỐNG
+- .docker-cache/jars/
+- .docker-cache/dist/
 
-### 1. Kiểm tra Web UIs
+## 3. Build image
 
-Mở trình duyệt và truy cập:
+Build nhanh theo luồng đề xuất (prefetch + build):
 
-| Service | URL | Mô tả |
-|---------|-----|-------|
-| **HDFS NameNode** | http://localhost:9870 | Quản lý HDFS |
-| **YARN ResourceManager** | http://localhost:8088 | Quản lý jobs |
-| **Spark Master** | http://localhost:8080 | Spark cluster UI |
-| **Spark History Server** | http://localhost:18080 | Lịch sử Spark jobs |
-
-### 2. Kiểm tra HDFS
+Nếu đã prefetch trước đó, có thể build trực tiếp:
 
 ```bash
-# Vào container master
-winpty docker exec -it master bash
-
-jps
-hdfs dfsadmin -report
-yarn node -list
-spark-submit --master spark://master:7077 --class org.apache.spark.examples.SparkPi $SPARK_HOME/examples/jars/spark-examples_2.12-3.5.0.jar 10
-
-# Test HDFS
-hdfs dfs -mkdir /test
-echo "Hello HDFS" > /tmp/test.txt
-hdfs dfs -put /tmp/test.txt /test/
-hdfs dfs -cat /test/test.txt
-hdfs dfs -rm -r /test
-
-# Thoát container
-exit
+make build
 ```
 
-### 3. Kiểm tra Spark
+Lệnh thay thế (không cần make):
 
 ```bash
-# Vào container master
-docker exec -it taxi-mining-master bash
-
-# Test Spark job (tính Pi)
-spark-submit \
-    --class org.apache.spark.examples.SparkPi \
-    --master spark://master:7077 \
-    $SPARK_HOME/examples/jars/spark-examples_*.jar 100
-
-# PySpark shell
-pyspark --master spark://master:7077
-
-# Trong PySpark shell:
->>> rdd = sc.parallelize(range(100))
->>> print(rdd.sum())
->>> exit()
-
-# Thoát container
-exit
+docker compose build
 ```
-## Monitoring URL
 
-### HDFS NameNode UI  
-**URL:** http://master:9870  
+Ghi chú:
 
-- Giao diện quản trị HDFS.  
-- Hiển thị trạng thái cluster (dung lượng, số DataNode, block).  
-- Duyệt filesystem HDFS trên web.  
-- Kiểm tra tình trạng DataNode và replication.
+- Dockerfile ưu tiên đọc Hadoop/Spark/JAR từ cache local.
+- Nếu cache chưa có đủ file, Dockerfile sẽ fallback sang tải online cho các file này.
+- Python packages luôn cài online trong quá trình build image.
+- Hadoop archive: hadoop-3.3.6.tar.gz
+- Spark archive: spark-3.5.0-bin-hadoop3.tgz
 
----
+## 4. Khởi động cluster
 
-### HDFS DataNode UI  
-**URL:** http://worker-node:9864  
+```bash
+make up
+```
 
-- Giao diện của từng DataNode.  
-- Hiển thị block được lưu trên node.  
-- Kiểm tra dung lượng và trạng thái node.
+Lệnh thay thế (không cần make):
 
----
+```bash
+docker compose up -d
+```
 
-### YARN ResourceManager UI  
-**URL:** http://master:8088  
+## 5. Kiểm tra nhanh
 
-- Giao diện quản lý tài nguyên YARN.  
-- Hiển thị application đang chạy hoặc đã hoàn thành.  
-- Theo dõi container, CPU, memory.  
-- Xem log và trạng thái job.
+```bash
+make ps
+make logs-master
+make health
+```
 
----
+Lệnh thay thế (không cần make):
 
-### YARN NodeManager UI  
-**URL:** http://worker-node:8042  
+```bash
+docker compose ps
+docker compose logs -f master
+docker exec master hdfs dfsadmin -report
+docker exec master curl -s http://master:8080/json/ | grep -o '"aliveworkers":[0-9]*'
+```
 
-- Giao diện NodeManager trên mỗi worker.  
-- Hiển thị container đang chạy.  
-- Kiểm tra log container.
+### Có thể bị loỗi CRLF/LF: fix voới .gitattributes:
 
----
+Thêm file .gitattributes để Git không checkout CRLF cho .sh
 
-### Spark Master UI  
-**URL:** http://master:8080  
+```.gitattributes
+* text=auto
 
-- Giao diện quản lý Spark Standalone cluster.  
-- Hiển thị worker nodes, CPU cores, memory.  
-- Theo dõi các Spark applications.
+*.sh text eol=lf
+Dockerfile* text eol=lf
+docker-compose.yml text eol=lf
+```
 
----
+## 6. Truy cập UI
 
-### Spark Worker UI  
-**URL:** http://worker-node:8081  
+- HDFS NameNode: <http://localhost:9870>
+- YARN ResourceManager: <http://localhost:8088>
+- Spark Master UI: <http://localhost:8080>
+- Spark History: <http://localhost:18080>
+- Spark App UI (job đang chạy): <http://localhost:4040>
+- Jupyter: <http://localhost:8888>
 
-- Giao diện của Spark worker.  
-- Hiển thị executor và job chạy trên node.
+## 7. Vào container
 
----
+```bash
+make exec-master
+make exec-worker1
+make exec-worker2
+```
 
-### Spark Application UI  
-**URL:** http://master:4040  
+Lệnh thay thế (không cần make):
 
-- Giao diện chi tiết Spark job đang chạy.  
-- Hiển thị DAG, stages, tasks, thời gian thực thi và shuffle data.  
+```bash
+docker exec -it master bash
+docker exec -it worker1 bash
+docker exec -it worker2 bash
+```
 
-**Lưu ý:**  
-- `4040` – job đầu tiên  
-- `4041` – job thứ hai  
-- `4042` – job thứ ba  
+## 8. Test Spark nhanh
 
----
+```bash
+make test-spark
+```
 
-### Spark History Server UI  
-**URL:** http://master:18080  
+Lệnh thay thế (không cần make):
 
-- Lưu và xem lại thông tin Spark jobs đã hoàn thành.  
-- Hiển thị DAG, stages và tasks của job.
+```bash
+docker exec master spark-submit \
+  --class org.apache.spark.examples.SparkPi \
+  --master spark://master:7077 \
+  /opt/spark/examples/jars/spark-examples_*.jar 100
+```
+
+## 9. Dừng và dọn dẹp
+
+Dừng cluster (giữ volume):
+
+```bash
+make stop
+```
+
+Lệnh thay thế (không cần make):
+
+```bash
+docker compose stop
+```
+
+Tắt và xóa container:
+
+```bash
+make down
+```
+
+Lệnh thay thế (không cần make):
+
+```bash
+docker compose down
+```
+
+Xóa cả volumes và prune hệ thống Docker:
+
+```bash
+make clean
+```
+
+Lệnh thay thế (không cần make):
+
+```bash
+docker compose down -v
+docker system prune -f
+```
+
+## Lưu ý cho Windows
+
+- Nếu dùng Git Bash, bạn có thể chạy trực tiếp script bash và toàn bộ lệnh docker compose.
+- Nếu dùng PowerShell và chưa có make, hãy dùng các lệnh thay thế ở từng mục.

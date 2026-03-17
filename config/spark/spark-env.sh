@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Java Home
+# Java home
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 
 # Hadoop Configuration
