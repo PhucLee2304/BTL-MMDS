@@ -1,34 +1,19 @@
-FROM ubuntu:22.04
-
-LABEL description="Hadoop 3.3.6 + Spark 3.5.0 - WORKER node"
+FROM ubuntu:22.04 AS assets
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
-    openjdk-11-jdk \
-    openssh-server openssh-client \
-    wget curl vim nano net-tools iputils-ping \
-    python3 python3-pip python3-venv ca-certificates \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-ENV PATH=$PATH:$JAVA_HOME/bin
-ENV HDFS_DATANODE_USER=root
-ENV YARN_NODEMANAGER_USER=root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget ca-certificates tar \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV HADOOP_VERSION=3.3.6
-ENV HADOOP_HOME=/opt/hadoop
-ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
-ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+ENV SPARK_VERSION=3.5.0
 
-# RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
-#     "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
-#     || wget -q --timeout=60 --tries=5 --waitretry=10 \
-#     "https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
-#     && tar -xzf hadoop-${HADOOP_VERSION}.tar.gz \
-#     && mv hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
-#     && rm hadoop-${HADOOP_VERSION}.tar.gz
+ENV HADOOP_HOME=/opt/hadoop
+ENV SPARK_HOME=/opt/spark
+
 COPY .docker-cache/dist /tmp/dist
+
 RUN if [ -f /tmp/dist/hadoop-${HADOOP_VERSION}.tar.gz ] && tar -tzf /tmp/dist/hadoop-${HADOOP_VERSION}.tar.gz >/dev/null 2>&1; then \
         cp /tmp/dist/hadoop-${HADOOP_VERSION}.tar.gz /tmp/; \
     else \
@@ -45,18 +30,6 @@ RUN if [ -f /tmp/dist/hadoop-${HADOOP_VERSION}.tar.gz ] && tar -tzf /tmp/dist/ha
     && mv /opt/hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
     && rm /tmp/hadoop-${HADOOP_VERSION}.tar.gz
 
-ENV SPARK_VERSION=3.5.0
-ENV SPARK_HOME=/opt/spark
-ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
-ENV PYSPARK_PYTHON=python3
-
-# RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
-#     "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
-#     || wget -q --timeout=60 --tries=5 --waitretry=10 \
-#     "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
-#     && tar -xzf spark-${SPARK_VERSION}-bin-hadoop3.tgz \
-#     && mv spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
-#     && rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
 RUN if [ -f /tmp/dist/spark-${SPARK_VERSION}-bin-hadoop3.tgz ] && tar -tzf /tmp/dist/spark-${SPARK_VERSION}-bin-hadoop3.tgz >/dev/null 2>&1; then \
         cp /tmp/dist/spark-${SPARK_VERSION}-bin-hadoop3.tgz /tmp/; \
     else \
@@ -81,6 +54,40 @@ RUN if [ -f /tmp/jars/graphframes-0.8.3-spark3.5-s_2.12.jar ]; then \
         "https://repos.spark-packages.org/graphframes/graphframes/0.8.3-spark3.5-s_2.12/graphframes-0.8.3-spark3.5-s_2.12.jar" \
         -O ${SPARK_HOME}/jars/graphframes-0.8.3-spark3.5-s_2.12.jar; \
     fi
+
+FROM ubuntu:22.04
+
+LABEL description="Hadoop 3.3.6 + Spark 3.5.0 - WORKER node"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    openjdk-11-jdk-headless \
+    openssh-server openssh-client \
+    wget curl vim nano net-tools iputils-ping \
+    python3 python3-pip python3-venv ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV PATH=$PATH:$JAVA_HOME/bin
+ENV HDFS_DATANODE_USER=root
+ENV YARN_NODEMANAGER_USER=root
+
+ENV HADOOP_VERSION=3.3.6
+ENV HADOOP_HOME=/opt/hadoop
+ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+
+COPY --from=assets /opt/hadoop /opt/hadoop
+
+ENV SPARK_VERSION=3.5.0
+ENV SPARK_HOME=/opt/spark
+ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+ENV PYSPARK_PYTHON=python3
+
+COPY --from=assets /opt/spark /opt/spark
+
+RUN test -f ${SPARK_HOME}/jars/graphframes-0.8.3-spark3.5-s_2.12.jar
 
 RUN pip3 install --no-cache-dir --timeout=120 \
     pyspark==3.5.0 numpy pandas graphframes
