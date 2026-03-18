@@ -4,7 +4,27 @@ Tài liệu này mô tả cách build và chạy Hadoop + Spark cluster trong pr
   
 Lưu ý (*): các lệnh trong này nên được chạy ở thư mục gốc của dự án (là thư mục chứa các file cấu hình docker, .gitignore, .gitattributes), do đó cần cd tới thư mục gốc dự án (mỗi máy sẽ có đường dẫn khác nhau)
 
-Lệnh pip list --format=freeze | ForEach-Object { ($_ -split '==')[0] } > requirements.txt
+Nếu trong master cần thêm thư viện python, thực hiện (Sau buơc ## 4. Khởi động cluster):  
+
+- Vào master bash
+
+```bash  
+docker exec --it master bash  
+```  
+
+- Dùng pip đã được cài trong master để cài các thư viện python như thông thường  
+
+```bash  
+pip install <tên gói cần cài>  
+```  
+
+Lệnh pip list --format=freeze | ForEach-Object { ($_ -split '==')[0] } > requirements.txt  
+
+- Thoát môi trường bash của master:  
+
+```bash  
+exit  
+```  
 
 ## 2. Chuẩn bị artifact local để build nhanh
 
