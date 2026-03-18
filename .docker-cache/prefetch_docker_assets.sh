@@ -2,8 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIST_DIR="${ROOT_DIR}/.docker-cache/dist"
-JARS_DIR="${ROOT_DIR}/.docker-cache/jars"
+DIST_DIR=ROOT_DIR
+JARS_DIR=ROOT_DIR
+# DIST_DIR="${ROOT_DIR}/.docker-cache/dist"
+# JARS_DIR="${ROOT_DIR}/.docker-cache/jars"
 
 mkdir -p "${DIST_DIR}" "${JARS_DIR}"
 
@@ -73,4 +75,4 @@ download_file \
   "${JARS_DIR}/graphframes-0.8.3-spark3.5-s_2.12.jar" \
   "https://repos.spark-packages.org/graphframes/graphframes/0.8.3-spark3.5-s_2.12/graphframes-0.8.3-spark3.5-s_2.12.jar"
 
-echo ">>> Prefetch complete. Cached assets in .docker-cache/dist and .docker-cache/jars"
+echo ">>> Prefetch complete."

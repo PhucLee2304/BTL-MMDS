@@ -26,4 +26,5 @@ export PYSPARK_PYTHON=python3
 export PYSPARK_DRIVER_PYTHON=python3
 
 # History Server
-export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=hdfs://master:9000/tmp/spark-events"
+# Spark 3.5 scripts don't reliably propagate SPARK_HISTORY_OPTS; SPARK_DAEMON_JAVA_OPTS is applied.
+export SPARK_DAEMON_JAVA_OPTS="${SPARK_DAEMON_JAVA_OPTS:-} -Dspark.history.fs.logDirectory=hdfs://master:9000/spark-logs"
