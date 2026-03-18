@@ -9,4 +9,7 @@ hdfs dfs -mkdir -p /user/data/preprocess
 hdfs dfs -put /workspace/data/raw/*.parquet /user/data/raw/  
 
 # Mở jupyter server
-jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token='' --ServerApp.password=''
+nohup jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token='' --ServerApp.password='' > jupyter.log 2>&1 &  
+
+# Xem jupyter log
+tail -f jupyter.log
