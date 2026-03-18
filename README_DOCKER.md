@@ -1,6 +1,8 @@
 # Hướng dẫn chay Docker Cluster
 
-Tài liệu này mô tả cách build và chạy Hadoop + Spark cluster trong project.
+Tài liệu này mô tả cách build và chạy Hadoop + Spark cluster trong project.  
+
+Lệnh pip list --format=freeze | ForEach-Object { ($_ -split '==')[0] } > requirements.txt
 
 ## 2. Chuẩn bị artifact local để build nhanh
 
@@ -210,7 +212,7 @@ exit
 
 ```bash
 # Vào container master
-docker exec -it taxi-mining-master bash
+docker exec -it master bash
 
 # Test Spark job (tính Pi)
 spark-submit \
