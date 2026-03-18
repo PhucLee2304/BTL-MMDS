@@ -1,6 +1,8 @@
 # Hướng dẫn chay Docker Cluster
 
 Tài liệu này mô tả cách build và chạy Hadoop + Spark cluster trong project.  
+  
+Lưu ý (*): các lệnh trong này nên được chạy ở thư mục gốc của dự án (là thư mục chứa các file cấu hình docker, .gitignore, .gitattributes), do đó cần cd tới thư mục gốc dự án (mỗi máy sẽ có đường dẫn khác nhau)
 
 Lệnh pip list --format=freeze | ForEach-Object { ($_ -split '==')[0] } > requirements.txt
 
@@ -8,28 +10,18 @@ Lệnh pip list --format=freeze | ForEach-Object { ($_ -split '==')[0] } > requi
 
 Mục tiêu: tải sẵn Hadoop/Spark archives và GraphFrames JAR về máy local trước, để build lại nhanh hơn khi gặp lỗi hoặc cần rebuild nhiều lần.
 
+Thực hiện copy lệnh sau, dán vào cmd và enter để chạy, Lưu ý (*):
 ```bash
 bash .docker-cache/prefetch_docker_assets.sh
 ```
 
-Sau khi xong, dữ liệu cache nằm ở:
-
-- .docker-cache/jars/
-- .docker-cache/dist/
+Sau khi xong, các file Hadoop/Spark archives và GraphFrames JAR nằm ở thư mục gốc của dự án
 
 ## 3. Build image
 
 ```bash
 docker compose build
 ```
-
-Ghi chú:
-
-- Dockerfile ưu tiên đọc Hadoop/Spark/JAR từ cache local.
-- Nếu cache chưa có đủ file, Dockerfile sẽ fallback sang tải online cho các file này.
-- Python packages luôn cài online trong quá trình build image.
-- Hadoop archive: hadoop-3.3.6.tar.gz
-- Spark archive: spark-3.5.0-bin-hadoop3.tgz
 
 ## 4. Khởi động cluster
 
@@ -64,8 +56,12 @@ docker-compose.yml text eol=lf
 - YARN ResourceManager: <http://localhost:8088>
 - Spark Master UI: <http://localhost:8080>
 - Spark History: <http://localhost:18080>
-- Spark App UI (job đang chạy): <http://localhost:4040>
-- Jupyter: <http://localhost:8888>
+- Spark App UI (job đang chạy): <http://localhost:4040> , caá app khaác là 4041, 4042, ...
+- Jupyter: <http://localhost:8888> caần chaạy:
+
+```bash
+nohup jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token='' --ServerApp.password='' > jupyter.log 2>&1 &  
+```
 
 ## 7. Vào container
 
@@ -100,91 +96,6 @@ docker compose down
 docker compose down -v
 docker system prune -f
 ```
-
----
-
-## KIỂM TRA HỆ THỐNG
-
-### 1. Kiểm tra Web UIs
-
-### HDFS NameNode UI  
-**URL:** http://master:9870  
-
-- Giao diện quản trị HDFS.  
-- Hiển thị trạng thái cluster (dung lượng, số DataNode, block).  
-- Duyệt filesystem HDFS trên web.  
-- Kiểm tra tình trạng DataNode và replication.
-
----
-
-### HDFS DataNode UI  
-**URL:** http://worker-node:9864  
-
-- Giao diện của từng DataNode.  
-- Hiển thị block được lưu trên node.  
-- Kiểm tra dung lượng và trạng thái node.
-
----
-
-### YARN ResourceManager UI  
-**URL:** http://master:8088  
-
-- Giao diện quản lý tài nguyên YARN.  
-- Hiển thị application đang chạy hoặc đã hoàn thành.  
-- Theo dõi container, CPU, memory.  
-- Xem log và trạng thái job.
-
----
-
-### YARN NodeManager UI  
-**URL:** http://worker-node:8042  
-
-- Giao diện NodeManager trên mỗi worker.  
-- Hiển thị container đang chạy.  
-- Kiểm tra log container.
-
----
-
-### Spark Master UI  
-**URL:** http://master:8080  
-
-- Giao diện quản lý Spark Standalone cluster.  
-- Hiển thị worker nodes, CPU cores, memory.  
-- Theo dõi các Spark applications.
-
----
-
-### Spark Worker UI  
-**URL:** http://worker-node:8081  
-
-- Giao diện của Spark worker.  
-- Hiển thị executor và job chạy trên node.
-
----
-
-### Spark Application UI  
-**URL:** http://master:4040  
-
-- Giao diện chi tiết Spark job đang chạy.  
-- Hiển thị DAG, stages, tasks, thời gian thực thi và shuffle data.  
-
-**Lưu ý:**  
-- `4040` – job đầu tiên  
-- `4041` – job thứ hai  
-- `4042` – job thứ ba  
-
----
-
-### Spark History Server UI  
-**URL:** http://master:18080  
-
-- Lưu và xem lại thông tin Spark jobs đã hoàn thành.  
-- Hiển thị DAG, stages và tasks của job.
-Beta
-0 / 0
-used queries
-1
-
 
 ### 2. Kiểm tra HDFS
 
