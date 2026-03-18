@@ -61,8 +61,9 @@ if [ "$NODE_ROLE" = "master" ]; then
     done
 
     echo ">>> [MASTER] Preparing HDFS filesystem..."
-    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/raw_data
-    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/results
+    # $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/raw_data
+    # $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/results
+    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user
     $HADOOP_HOME/bin/hdfs dfs -mkdir -p /spark-logs
     $HADOOP_HOME/bin/hdfs dfs -mkdir -p /tmp/spark-events
     $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /user
