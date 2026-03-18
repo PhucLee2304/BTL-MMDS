@@ -1,28 +1,16 @@
-FROM ubuntu:22.04
-
-LABEL description="Hadoop 3.3.6 + Spark 3.5.0 - MASTER node"
+FROM ubuntu:22.04 AS assets
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
-    openjdk-11-jdk \
-    openssh-server openssh-client \
-    wget curl vim nano net-tools iputils-ping \
-    python3 python3-pip python3-venv ca-certificates \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-ENV PATH=$PATH:$JAVA_HOME/bin
-ENV HDFS_NAMENODE_USER=root
-ENV HDFS_DATANODE_USER=root
-ENV HDFS_SECONDARYNAMENODE_USER=root
-ENV YARN_RESOURCEMANAGER_USER=root
-ENV YARN_NODEMANAGER_USER=root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget ca-certificates tar \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV HADOOP_VERSION=3.3.6
+ENV SPARK_VERSION=3.5.0
+
 ENV HADOOP_HOME=/opt/hadoop
-ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
-ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+ENV SPARK_HOME=/opt/spark
 
 # RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
 #     "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
