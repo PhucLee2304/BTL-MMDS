@@ -12,4 +12,7 @@ hdfs dfs -put /workspace/data/raw/* /user/data/raw/
 nohup jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp.token='' --ServerApp.password='' > jupyter.log 2>&1 &  
 
 # Xem jupyter log
-tail -f jupyter.log
+tail -f jupyter.log  
+
+# Kill jupyter
+pkill -9 -f "/usr/local/bin/jupyter-lab"
