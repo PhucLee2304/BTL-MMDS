@@ -9,7 +9,7 @@ Nếu trong master cần thêm thư viện python, thực hiện (Sau buơc ## 4
 - Vào master bash
 
 ```bash  
-docker exec --it master bash  
+docker exec -it master bash  
 ```  
 
 - Dùng pip đã được cài trong master để cài các thư viện python như thông thường  
