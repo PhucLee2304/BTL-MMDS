@@ -10,6 +10,10 @@ export HDFS_SECONDARYNAMENODE_USER=root
 export YARN_RESOURCEMANAGER_USER=root
 export YARN_NODEMANAGER_USER=root
 
+# Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
+sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
+sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true
+
 echo "========================================="
 echo "Starting NYC Taxi Mining Container"
 echo "Role: ${NODE_TYPE} / Hostname: $(hostname)"
@@ -20,121 +24,94 @@ service ssh start || true
 NODE_ROLE=${NODE_TYPE:-"worker"}
 
 if [ "$NODE_ROLE" = "master" ]; then
-    echo ">>> [MASTER] Starting services using --daemon commands..."
+    echo ">>> [MASTER] Starting Control Plane services..."
 
-    # Format NameNode nếu chưa format
     if [ ! -f /hadoop_data/namenode/formatted ]; then
-        echo ">>> [MASTER] Formatting NameNode..."
+        echo ">>> [MASTER] First time run: Formatting NameNode..."
         $HADOOP_HOME/bin/hdfs namenode -format -force -nonInteractive
         touch /hadoop_data/namenode/formatted
         echo ">>> [MASTER] Format done."
     fi
 
-    # Start NameNode
     echo ">>> [MASTER] Starting NameNode..."
     $HADOOP_HOME/bin/hdfs --daemon start namenode
     sleep 8
 
-    # Kiểm tra NameNode đã up
-    echo ">>> [MASTER] Checking NameNode..."
+    echo ">>> [MASTER] Checking HDFS availability..."
     for i in $(seq 1 10); do
         if $HADOOP_HOME/bin/hdfs dfs -ls / >/dev/null 2>&1; then
-            echo ">>> [MASTER] NameNode is UP!"
+            echo ">>> [MASTER] HDFS is UP!"
             break
         fi
-        echo "    Waiting NameNode... ($i/10)"
+        echo "    Waiting for NameNode... ($i/10)"
         sleep 3
     done
 
-    # Start SecondaryNameNode
-    echo ">>> [MASTER] Starting SecondaryNameNode..."
     $HADOOP_HOME/bin/hdfs --daemon start secondarynamenode || true
 
-    # Start DataNode trên master
-    echo ">>> [MASTER] Starting DataNode on master..."
-    $HADOOP_HOME/bin/hdfs --daemon start datanode
-    sleep 5
+    echo ">>> [MASTER] Waiting for NameNode to leave safe mode..."
+    for i in $(seq 1 30); do
+        SAFE_MODE_STATE=$($HADOOP_HOME/bin/hdfs dfsadmin -safemode get 2>/dev/null || true)
+        if echo "$SAFE_MODE_STATE" | grep -qi "OFF"; then
+            echo ">>> [MASTER] NameNode safe mode is OFF."
+            break
+        fi
+        echo "    Safe mode still ON. Retrying in 3s... ($i/30)"
+        sleep 3
+    done
 
-    # Tạo thư mục HDFS
-    echo ">>> [MASTER] Creating HDFS directories..."
-    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/raw_data    || true
-    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/zone_lookup  || true
-    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/results      || true
-    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /tmp/spark-events       || true
-    $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /user               || true
-    $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /tmp                || true
+    echo ">>> [MASTER] Preparing HDFS filesystem..."
+    # $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/raw_data
+    # $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/results
+    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user
+    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /spark-logs
+    $HADOOP_HOME/bin/hdfs dfs -mkdir -p /tmp/spark-events
+    $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /user
+    $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /spark-logs
+    $HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /tmp/spark-events
 
-    # Start ResourceManager
-    echo ">>> [MASTER] Starting ResourceManager..."
+    echo ">>> [MASTER] Starting YARN ResourceManager..."
     $HADOOP_HOME/bin/yarn --daemon start resourcemanager
     sleep 3
 
-    # Start NodeManager trên master
-    echo ">>> [MASTER] Starting NodeManager on master..."
-    $HADOOP_HOME/bin/yarn --daemon start nodemanager
-    sleep 2
-
-    # Start Spark Master
     echo ">>> [MASTER] Starting Spark Master..."
     $SPARK_HOME/sbin/start-master.sh
-    sleep 3
+    sleep 2
 
-    # Start Spark History Server
     echo ">>> [MASTER] Starting Spark History Server..."
     $SPARK_HOME/sbin/start-history-server.sh || true
 
     echo "========================================="
-    echo "MASTER started! Check:"
-    echo "  HDFS UI:  http://localhost:9870"
-    echo "  YARN UI:  http://localhost:8088"
-    echo "  Spark UI: http://localhost:8080"
-    echo "  History:  http://localhost:18080"
+    echo "MASTER services are ONLINE"
+    echo "HDFS UI:    http://localhost:9870"
+    echo "Spark UI:   http://localhost:8080"
+    echo "History:    http://localhost:18080"
     echo "========================================="
 
-    # Report sau 40s
-    sleep 40
-    echo ">>> [MASTER] DataNode report:"
-    $HADOOP_HOME/bin/hdfs dfsadmin -report 2>&1 | head -20
-
 elif [ "$NODE_ROLE" = "worker" ]; then
-    echo ">>> [WORKER] Starting worker node: $(hostname)"
+    echo ">>> [WORKER] Starting computing node: $(hostname)"
 
-    # Chờ NameNode sẵn sàng
-    echo ">>> [WORKER] Waiting for NameNode at master:9000..."
-    for i in $(seq 1 40); do
-        if $HADOOP_HOME/bin/hdfs dfs -ls / >/dev/null 2>&1; then
-            echo ">>> [WORKER] NameNode is ready! (attempt $i)"
-            break
-        fi
-        echo "    Attempt $i/40 - waiting 5s..."
+    echo ">>> [WORKER] Waiting for NameNode (master:9000)..."
+    until $HADOOP_HOME/bin/hdfs dfs -ls / >/dev/null 2>&1; do
+        echo "    NameNode is not reachable. Retrying in 5s..."
         sleep 5
     done
+    echo ">>> [WORKER] Connected to Master!"
 
-    # Start DataNode
     echo ">>> [WORKER] Starting DataNode..."
     $HADOOP_HOME/bin/hdfs --daemon start datanode
-    sleep 3
+    sleep 2
 
-    # Start NodeManager
     echo ">>> [WORKER] Starting NodeManager..."
     $HADOOP_HOME/bin/yarn --daemon start nodemanager
-    sleep 3
+    sleep 2
 
-    # Start Spark Worker
-    echo ">>> [WORKER] Starting Spark Worker -> spark://master:7077"
+    echo ">>> [WORKER] Starting Spark Worker..."
     $SPARK_HOME/sbin/start-worker.sh spark://master:7077
 
     echo "========================================="
-    echo "WORKER $(hostname) started!"
-    echo "  DataNode + NodeManager + SparkWorker: running"
+    echo "WORKER $(hostname) is ONLINE"
     echo "========================================="
-
-else
-    echo "WARNING: Unknown NODE_TYPE='${NODE_TYPE}', starting as worker..."
-    sleep 20
-    $HADOOP_HOME/bin/hdfs --daemon start datanode || true
-    $SPARK_HOME/sbin/start-worker.sh spark://master:7077 || true
 fi
 
-echo "Container is running."
 tail -f /dev/null

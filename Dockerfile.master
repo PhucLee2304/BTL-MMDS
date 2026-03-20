@@ -1,3 +1,85 @@
+FROM ubuntu:22.04 AS assets
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget ca-certificates tar \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV HADOOP_VERSION=3.3.6
+ENV SPARK_VERSION=3.5.0
+
+ENV HADOOP_HOME=/opt/hadoop
+ENV SPARK_HOME=/opt/spark
+
+# RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
+#     "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+#     || wget -q --timeout=60 --tries=5 --waitretry=10 \
+#     "https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+#     && tar -xzf hadoop-${HADOOP_VERSION}.tar.gz \
+#     && mv hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
+#     && rm hadoop-${HADOOP_VERSION}.tar.gz
+# COPY .docker-cache/dist /tmp/dist
+# RUN if [ -f /tmp/dist/hadoop-${HADOOP_VERSION}.tar.gz ] && tar -tzf /tmp/dist/hadoop-${HADOOP_VERSION}.tar.gz >/dev/null 2>&1; then \
+#         cp /tmp/dist/hadoop-${HADOOP_VERSION}.tar.gz /tmp/; \
+#     else \
+#         rm -f /tmp/hadoop-${HADOOP_VERSION}.tar.gz; \
+#         wget -q --timeout=60 --tries=5 --waitretry=10 \
+#         "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+#         -O /tmp/hadoop-${HADOOP_VERSION}.tar.gz \
+#         || wget -q --timeout=60 --tries=5 --waitretry=10 \
+#         "https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+#         -O /tmp/hadoop-${HADOOP_VERSION}.tar.gz; \
+#     fi \
+#     && tar -tzf /tmp/hadoop-${HADOOP_VERSION}.tar.gz >/dev/null 2>&1 \
+#     && tar -xzf /tmp/hadoop-${HADOOP_VERSION}.tar.gz -C /opt/ \
+#     && mv /opt/hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
+#     && rm /tmp/hadoop-${HADOOP_VERSION}.tar.gz
+COPY hadoop-3.3.6.tar.gz /tmp/
+RUN tar -xzf /tmp/hadoop-3.3.6.tar.gz -C /opt/ \
+    && mv /opt/hadoop-3.3.6 ${HADOOP_HOME} \
+    && rm /tmp/hadoop-3.3.6.tar.gz
+
+# RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
+#     "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
+#     || wget -q --timeout=60 --tries=5 --waitretry=10 \
+#     "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
+#     && tar -xzf spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+#     && mv spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
+#     && rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
+# RUN if [ -f /tmp/dist/spark-${SPARK_VERSION}-bin-hadoop3.tgz ] && tar -tzf /tmp/dist/spark-${SPARK_VERSION}-bin-hadoop3.tgz >/dev/null 2>&1; then \
+#         cp /tmp/dist/spark-${SPARK_VERSION}-bin-hadoop3.tgz /tmp/; \
+#     else \
+#         rm -f /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz; \
+#         wget -q --timeout=60 --tries=5 --waitretry=10 \
+#         "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
+#         -O /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+#         || wget -q --timeout=60 --tries=5 --waitretry=10 \
+#         "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
+#         -O /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz; \
+#     fi \
+#     && tar -tzf /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz >/dev/null 2>&1 \
+#     && tar -xzf /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz -C /opt/ \
+#     && mv /opt/spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
+#     && rm /tmp/spark-${SPARK_VERSION}-bin-hadoop3.tgz
+COPY spark-3.5.0-bin-hadoop3.tgz /tmp/
+RUN tar -xzf /tmp/spark-3.5.0-bin-hadoop3.tgz -C /opt/ \
+    && mv /opt/spark-3.5.0-bin-hadoop3 ${SPARK_HOME} \
+    && rm /tmp/spark-3.5.0-bin-hadoop3.tgz
+
+# COPY .docker-cache/jars /tmp/jars
+# RUN if [ -f /tmp/jars/graphframes-0.8.3-spark3.5-s_2.12.jar ]; then \
+#         cp /tmp/jars/graphframes-0.8.3-spark3.5-s_2.12.jar ${SPARK_HOME}/jars/; \
+#     else \
+#         wget -q --timeout=60 --tries=5 --waitretry=10 \
+#         "https://repos.spark-packages.org/graphframes/graphframes/0.8.3-spark3.5-s_2.12/graphframes-0.8.3-spark3.5-s_2.12.jar" \
+#         -O ${SPARK_HOME}/jars/graphframes-0.8.3-spark3.5-s_2.12.jar; \
+#     fi
+# RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
+#     "https://repos.spark-packages.org/graphframes/graphframes/0.8.3-spark3.5-s_2.12/graphframes-0.8.3-spark3.5-s_2.12.jar" \
+#     -O ${SPARK_HOME}/jars/graphframes-0.8.3-spark3.5-s_2.12.jar
+COPY graphframes-0.8.3-spark3.5-s_2.12.jar ${SPARK_HOME}/jars/
+
 FROM ubuntu:22.04
 
 LABEL description="Hadoop 3.3.6 + Spark 3.5.0 - MASTER node"
@@ -5,7 +87,7 @@ LABEL description="Hadoop 3.3.6 + Spark 3.5.0 - MASTER node"
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    openjdk-11-jdk \
+    openjdk-11-jdk-headless \
     openssh-server openssh-client \
     wget curl vim nano net-tools iputils-ping \
     python3 python3-pip python3-venv ca-certificates \
@@ -24,30 +106,16 @@ ENV HADOOP_HOME=/opt/hadoop
 ENV HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
 
-RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
-    "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
-    || wget -q --timeout=60 --tries=5 --waitretry=10 \
-    "https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
-    && tar -xzf hadoop-${HADOOP_VERSION}.tar.gz \
-    && mv hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
-    && rm hadoop-${HADOOP_VERSION}.tar.gz
+COPY --from=assets /opt/hadoop /opt/hadoop
 
 ENV SPARK_VERSION=3.5.0
 ENV SPARK_HOME=/opt/spark
 ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
 ENV PYSPARK_PYTHON=python3
 
-RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
-    "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
-    || wget -q --timeout=60 --tries=5 --waitretry=10 \
-    "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
-    && tar -xzf spark-${SPARK_VERSION}-bin-hadoop3.tgz \
-    && mv spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
-    && rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
+COPY --from=assets /opt/spark /opt/spark
 
-RUN wget -q --timeout=60 --tries=5 --waitretry=10 \
-    "https://repos.spark-packages.org/graphframes/graphframes/0.8.3-spark3.5-s_2.12/graphframes-0.8.3-spark3.5-s_2.12.jar" \
-    -O ${SPARK_HOME}/jars/graphframes-0.8.3-spark3.5-s_2.12.jar
+RUN test -f ${SPARK_HOME}/jars/graphframes-0.8.3-spark3.5-s_2.12.jar
 
 RUN pip3 install --no-cache-dir --timeout=120 \
     pyspark==3.5.0 numpy pandas matplotlib seaborn networkx jupyter jupyterlab graphframes
@@ -68,16 +136,23 @@ COPY config/hadoop/hdfs-site.xml ${HADOOP_HOME}/etc/hadoop/hdfs-site.xml
 COPY config/hadoop/yarn-site.xml ${HADOOP_HOME}/etc/hadoop/yarn-site.xml
 COPY config/hadoop/mapred-site.xml ${HADOOP_HOME}/etc/hadoop/mapred-site.xml
 COPY config/hadoop/workers ${HADOOP_HOME}/etc/hadoop/workers
+RUN sed -i 's/\r$//' ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
 RUN chmod 644 ${HADOOP_HOME}/etc/hadoop/*.xml ${HADOOP_HOME}/etc/hadoop/workers && \
     chmod 755 ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
 
 COPY config/spark/spark-env.sh ${SPARK_HOME}/conf/spark-env.sh
+RUN sed -i 's/\r$//' ${SPARK_HOME}/conf/spark-env.sh
 RUN chmod 755 ${SPARK_HOME}/conf/spark-env.sh
+
+COPY config/spark/spark-defaults.conf ${SPARK_HOME}/conf/spark-defaults.conf
+RUN sed -i 's/\r$//' ${SPARK_HOME}/conf/spark-defaults.conf
+RUN chmod 644 ${SPARK_HOME}/conf/spark-defaults.conf
 
 EXPOSE 9000 9870 9864 9866 9867 8088 8030 8031 8032 8033 7077 8080 8081 4040 18080 8888
 
 WORKDIR /workspace
 COPY docker-entrypoint.sh /usr/local/bin/
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["bash"]

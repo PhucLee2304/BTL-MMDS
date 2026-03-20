@@ -1,79 +1,89 @@
-.PHONY: build up down start stop restart logs clean ps exec-master exec-worker1
+.PHONY: prep-assets-local build build-fast up down start stop restart logs logs-master logs-worker1 logs-worker2 ps exec-master exec-worker1 exec-worker2 clean health hdfs-init test-spark
 
-# Build images
+COMPOSE = docker compose
+
+# Download and cache Hadoop/Spark archives and GraphFrames jar (no Docker required)
+prep-assets-local:
+	bash .docker-cache/prefetch_docker_assets.sh
+
+# Build images (use local cache if available, fallback to online download)
 build:
-	docker-compose build
+	$(COMPOSE) build
 
-# Start cluster (2 nodes: master + worker1)
+# Fast and stable flow for repeated rebuilds
+build-fast: prep-assets-local build
+
+# Start cluster (master + worker1 + worker2)
 up:
-	docker-compose up -d
-
-# Start full cluster (3 nodes: master + worker1 + worker2)
-up-full:
-	docker-compose --profile full-cluster up -d
+	$(COMPOSE) up -d
 
 # Stop and remove containers
 down:
-	docker-compose down
+	$(COMPOSE) down
 
-# Stop containers (keep data)
+# Stop containers (keep volumes)
 stop:
-	docker-compose stop
+	$(COMPOSE) stop
 
 # Start stopped containers
 start:
-	docker-compose start
+	$(COMPOSE) start
 
 # Restart cluster
 restart:
-	docker-compose restart
+	$(COMPOSE) restart
 
 # View logs
 logs:
-	docker-compose logs -f
+	$(COMPOSE) logs -f
 
-# View logs of specific service
+# View logs by service
 logs-master:
-	docker-compose logs -f master
+	$(COMPOSE) logs -f master
 
 logs-worker1:
-	docker-compose logs -f worker1
+	$(COMPOSE) logs -f worker1
+
+logs-worker2:
+	$(COMPOSE) logs -f worker2
 
 # Show running containers
 ps:
-	docker-compose ps
+	$(COMPOSE) ps
 
-# Execute bash in master
+# Execute bash in containers
 exec-master:
-	docker exec -it taxi-mining-master bash
+	docker exec -it master bash
 
-# Execute bash in worker1
 exec-worker1:
-	docker exec -it taxi-mining-worker1 bash
+	docker exec -it worker1 bash
+
+exec-worker2:
+	docker exec -it worker2 bash
 
 # Clean everything (WARNING: removes volumes)
 clean:
-	docker-compose down -v
+	$(COMPOSE) down -v
 	docker system prune -f
 
 # Check cluster health
 health:
 	@echo "=== HDFS Status ==="
-	docker exec taxi-mining-master hdfs dfsadmin -report
+	docker exec master hdfs dfsadmin -report
 	@echo "\n=== Spark Workers ==="
-	docker exec taxi-mining-master curl -s http://master:8080/json/ | grep -o '"aliveworkers":[0-9]*'
+	docker exec master curl -s http://master:8080/json/ | grep -o '"aliveworkers":[0-9]*'
 
 # Create required directories in HDFS
 hdfs-init:
-	docker exec taxi-mining-master hdfs dfs -mkdir -p /user/taxi/raw_data
-	docker exec taxi-mining-master hdfs dfs -mkdir -p /user/taxi/zone_lookup
-	docker exec taxi-mining-master hdfs dfs -mkdir -p /user/taxi/results
-	docker exec taxi-mining-master hdfs dfs -mkdir -p /spark-logs
-	docker exec taxi-mining-master hdfs dfs -chmod -R 777 /spark-logs
+	docker exec master hdfs dfs -mkdir -p /user/taxi/raw_data
+	docker exec master hdfs dfs -mkdir -p /user/taxi/zone_lookup
+	docker exec master hdfs dfs -mkdir -p /user/taxi/results
+	docker exec master hdfs dfs -mkdir -p /spark-logs
+	docker exec master hdfs dfs -chmod -R 777 /spark-logs
 
 # Test Spark
 test-spark:
-	docker exec taxi-mining-master spark-submit \
+	docker exec master spark-submit \
 		--class org.apache.spark.examples.SparkPi \
 		--master spark://master:7077 \
 		/opt/spark/examples/jars/spark-examples_*.jar 100
