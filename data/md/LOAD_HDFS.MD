@@ -15,4 +15,7 @@ nohup jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --ServerApp
 tail -f jupyter.log  
 
 # Kill jupyter
-pkill -9 -f "/usr/local/bin/jupyter-lab"
+pkill -9 -f "/usr/local/bin/jupyter-lab"  
+
+# Xóa thư mục data
+hdfs dfs -rm -r /user/data/preprocess
