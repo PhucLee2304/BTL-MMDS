@@ -34,7 +34,7 @@ services:
     #   resources:
     #     limits:
     #       memory: 4G
-    mem_limit: 6g
+    mem_limit: 4g
 
   worker1:
     build:
@@ -57,7 +57,7 @@ services:
     #   resources:
     #     limits:
     #       memory: 3G
-    mem_limit: 2g
+    mem_limit: 3g
 
   worker2:
     image: worker:latest
@@ -77,7 +77,7 @@ services:
     #   resources:
     #     limits:
     #       memory: 3G
-    mem_limit: 2g
+    mem_limit: 3g
 
 volumes:
   hadoop_namenode:
