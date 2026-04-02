@@ -210,3 +210,7 @@ __marimo__/
 *.tgz
 *.jar
 .idea/**
+code/kshape/demand/**
+code/kshape/clustering_meta/**
+code/kshape/feature_meta/**
+code/kshape/preprocess/**
