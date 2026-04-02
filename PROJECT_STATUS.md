@@ -116,7 +116,3 @@ Status: requirements are not formalized in a single guideline file in this repo 
 - Makefile health check portability (grep) is fragile on Windows PowerShell.
 - Dataset loading path + schema contracts are not frozen yet (docs exist but no code contract).
 
-## Change log
-
-- 2026-03-16: Initial status file created.
-- 2026-03-17: Synced status with repo reality; documented CRLF fix + Spark History dir; clarified missing code skeleton and PowerShell-safe health checks.
