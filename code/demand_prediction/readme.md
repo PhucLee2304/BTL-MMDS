@@ -15,6 +15,13 @@ This folder contains distributed demand-prediction notebooks aligned with paper.
 
 - Input data is stored in HDFS parquet files at:
   - `/user/data/raw/*.parquet`
+  - if not:  
+  
+  ```bash
+  hdfs dfs -mkdir -p /user/data/raw
+  hdfs dfs -put -f /workspace/data/raw/*.parquet /user/data/raw/
+  ```  
+
 - The notebook filters internally to:
   - `2025-01-01 00:00:00 <= pickup_time < 2025-07-01 00:00:00`
 - Expected columns (at least):
