@@ -74,8 +74,20 @@ if [ "$NODE_ROLE" = "master" ]; then
     $HADOOP_HOME/bin/yarn --daemon start resourcemanager
     sleep 3
 
+    echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
+    $HADOOP_HOME/bin/hdfs --daemon start datanode
+    sleep 2
+
+    echo ">>> [MASTER] Starting NodeManager on master (hybrid mode)..."
+    $HADOOP_HOME/bin/yarn --daemon start nodemanager
+    sleep 2
+
     echo ">>> [MASTER] Starting Spark Master..."
     $SPARK_HOME/sbin/start-master.sh
+    sleep 2
+
+    echo ">>> [MASTER] Starting Spark Worker on master ..."
+    $SPARK_HOME/sbin/start-worker.sh spark://master:7077
     sleep 2
 
     echo ">>> [MASTER] Starting Spark History Server..."

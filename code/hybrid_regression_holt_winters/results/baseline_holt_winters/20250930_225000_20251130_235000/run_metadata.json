@@ -1,0 +1,8 @@
+{
+  "run_id": "20250930_225000_20251130_235000",
+  "dense_path": "/user/data/feature_engineering/demand_prediction_dense_10m",
+  "effective_start": "2025-09-30 22:50:00",
+  "effective_end": "2025-11-30 23:50:00",
+  "hdfs_output_base": "/user/data/results/demand_prediction/holt_winters/20250930_225000_20251130_235000",
+  "n_zones_fitted": 20
+}
