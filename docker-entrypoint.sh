@@ -86,8 +86,8 @@ if [ "$NODE_ROLE" = "master" ]; then
     $SPARK_HOME/sbin/start-master.sh
     sleep 2
 
-    echo ">>> [MASTER] Starting Spark Worker on master (limited resources)..."
-    $SPARK_HOME/sbin/start-worker.sh -c 1 -m 1g spark://master:7077
+    echo ">>> [MASTER] Starting Spark Worker on master ..."
+    $SPARK_HOME/sbin/start-worker.sh spark://master:7077
     sleep 2
 
     echo ">>> [MASTER] Starting Spark History Server..."
