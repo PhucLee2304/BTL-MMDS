@@ -1,0 +1,22 @@
+{
+  "raw_path": "/user/data/raw/*.parquet",
+  "pickup_column": "tpep_pickup_datetime",
+  "effective_start": "2025-09-30 22:54:51",
+  "effective_end": "2025-11-30 23:59:59",
+  "dense_rows": 2303242,
+  "feature_rows": 2039146,
+  "cleaning_summary": {
+    "raw_rows": 8610143,
+    "removed_null_pickup_ts": 0,
+    "removed_null_zone": 0,
+    "removed_nonpositive_zone": 0,
+    "removed_time_outliers_iqr": 3,
+    "iqr_lower_ts": "2025-09-02 14:47:27",
+    "iqr_upper_ts": "2025-12-28 21:38:02",
+    "rows_after_cleaning": 8610140
+  },
+  "hdfs_outputs": {
+    "dense": "/user/data/feature_engineering/demand_prediction_dense_10m",
+    "features": "/user/data/feature_engineering/demand_prediction_features"
+  }
+}
