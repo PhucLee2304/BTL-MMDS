@@ -25,6 +25,7 @@ services:
       - "8888:8888"
     volumes:
       - hadoop_namenode:/hadoop_data/namenode
+      - hadoop_datanode_master:/hadoop_data/datanode
       - ./config:/workspace/config
       - ./code:/workspace/code
       - ./data:/workspace/data
@@ -51,6 +52,7 @@ services:
       - YARN_NODEMANAGER_USER=root
     volumes:
       - hadoop_datanode1:/hadoop_data/datanode
+      - ./code:/workspace/code
     networks:
       - hadoop_network
     # deploy:
@@ -71,6 +73,7 @@ services:
       - YARN_NODEMANAGER_USER=root
     volumes:
       - hadoop_datanode2:/hadoop_data/datanode
+      - ./code:/workspace/code
     networks:
       - hadoop_network
     # deploy:
@@ -81,6 +84,7 @@ services:
 
 volumes:
   hadoop_namenode:
+  hadoop_datanode_master:
   hadoop_datanode1:
   hadoop_datanode2:
 

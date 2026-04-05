@@ -210,3 +210,6 @@ __marimo__/
 *.tgz
 *.jar
 .idea/**
+code/kshape/clustering
+code/kshape/model
+code/kshape/preclustering
