@@ -52,6 +52,7 @@ services:
       - YARN_NODEMANAGER_USER=root
     volumes:
       - hadoop_datanode1:/hadoop_data/datanode
+      - ./code:/workspace/code
     networks:
       - hadoop_network
     # deploy:
@@ -72,6 +73,7 @@ services:
       - YARN_NODEMANAGER_USER=root
     volumes:
       - hadoop_datanode2:/hadoop_data/datanode
+      - ./code:/workspace/code
     networks:
       - hadoop_network
     # deploy:
