@@ -10,12 +10,9 @@ export HDFS_SECONDARYNAMENODE_USER=root
 export YARN_RESOURCEMANAGER_USER=root
 export YARN_NODEMANAGER_USER=root
 export HADOOP_NICENESS=0
-export YARN_NICENESS=0
 export HADOOP_NAMENODE_NICENESS=0
 export HADOOP_DATANODE_NICENESS=0
 export HADOOP_SECONDARYNAMENODE_NICENESS=0
-export YARN_RESOURCEMANAGER_NICENESS=0
-export YARN_NODEMANAGER_NICENESS=0
 NN_LOCAL_URI=hdfs://127.0.0.1:9000
 
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
@@ -60,8 +57,44 @@ for i in $(seq 1 10); do
 done
 
 echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
+# In Docker Desktop NAT mode, the master container may not reach its own LAN IP reliably.
+# Override only local DataNode -> NameNode RPC target to loopback so at least one DataNode is always available.
+export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.namenode.rpc-address=127.0.0.1:9000"
 $HADOOP_HOME/bin/hdfs --daemon start datanode
 sleep 2
+
+if ! jps | grep -q "DataNode"; then
+    echo ">>> [MASTER][WARN] DataNode process is not running after startup attempt."
+    tail -n 200 "$HADOOP_HOME"/logs/*datanode* 2>/dev/null || true
+fi
+
+echo ">>> [MASTER] Waiting for at least one live DataNode..."
+DN_LIVE=false
+for i in $(seq 1 20); do
+    DN_REPORT=$($HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_LOCAL_URI" -report 2>&1 || true)
+    if echo "$DN_REPORT" | grep -Eqi "Live datanodes \([1-9][0-9]*\)"; then
+        echo ">>> [MASTER] Live DataNode detected."
+        DN_LIVE=true
+        break
+    fi
+    if echo "$DN_REPORT" | grep -Eqi "Live datanodes \(0\)"; then
+        echo "    No live DataNode yet. Retrying in 3s... ($i/20)"
+        sleep 3
+        continue
+    fi
+    if [ $((i % 5)) -eq 0 ]; then
+        echo "    DataNode report sample (attempt $i):"
+        echo "$DN_REPORT" | head -n 20 || true
+    fi
+    echo "    DataNode report not ready: $(echo "$DN_REPORT" | tail -n 1). Retrying in 3s... ($i/20)"
+    sleep 3
+done
+
+if [ "$DN_LIVE" != "true" ]; then
+    echo ">>> [MASTER][WARN] No live DataNode detected after timeout. Dumping DataNode diagnostics..."
+    tail -n 200 "$HADOOP_HOME"/logs/*datanode* 2>/dev/null || true
+    $HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_LOCAL_URI" -report 2>&1 || true
+fi
 
 $HADOOP_HOME/bin/hdfs --daemon start secondarynamenode || true
 
