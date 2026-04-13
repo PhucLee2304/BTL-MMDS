@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://__MASTER_HOST__:9000</value>
+        <description>NameNode URI</description>
+    </property>
+    <property>
+        <name>hadoop.tmp.dir</name>
+        <value>/hadoop_tmp</value>
+        <description>Temporary directory for Hadoop</description>
+    </property>
+</configuration>

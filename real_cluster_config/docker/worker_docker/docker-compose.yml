@@ -1,0 +1,28 @@
+name: mmds
+
+services:
+  worker:
+    build:
+      context: ../..
+      dockerfile: docker/worker_docker/Dockerfile
+    image: hadoop-spark-worker:real
+    container_name: worker
+    network_mode: host
+    environment:
+      - NODE_TYPE=worker
+      - MASTER_HOST
+      - HDFS_DATANODE_USER=root
+      - YARN_NODEMANAGER_USER=root
+    volumes:
+      - hadoop_datanode:/hadoop_data/datanode
+      - ../../config:/workspace/config
+      - ../../../code:/workspace/code
+      - ../../../data:/workspace/data
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 10G
+    mem_limit: 10g
+
+volumes:
+  hadoop_datanode:
