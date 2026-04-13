@@ -7,10 +7,19 @@ services:
       dockerfile: docker/master_docker/Dockerfile
     image: hadoop-spark-master:real
     container_name: master
-    network_mode: host
+    ports:
+      - "9000:9000"
+      - "9870:9870"
+      - "9868:9868"
+      - "8088:8088"
+      - "8030:8030"
+      - "8031:8031"
+      - "8032:8032"
+      - "8033:8033"
+      - "18080:18080"
+      - "9866:9866"
     environment:
       - NODE_TYPE=master
-      - MASTER_HOST
       - HDFS_NAMENODE_USER=root
       - HDFS_DATANODE_USER=root
       - HDFS_SECONDARYNAMENODE_USER=root
