@@ -114,8 +114,8 @@ COPY --from=assets /opt/spark /opt/spark
 
 RUN test -f ${SPARK_HOME}/jars/graphframes-0.8.3-spark3.5-s_2.12.jar
 
-RUN pip3 install --no-cache-dir --timeout=120 \
-    pyspark==3.5.0 numpy pandas graphframes
+# RUN pip3 install --no-cache-dir --timeout=120 \
+#     pyspark==3.5.0 numpy pandas graphframes
 
 RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa && \
     cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys && \
