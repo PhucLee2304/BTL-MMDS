@@ -9,17 +9,14 @@ export HDFS_DATANODE_USER=root
 export HDFS_SECONDARYNAMENODE_USER=root
 export YARN_RESOURCEMANAGER_USER=root
 export YARN_NODEMANAGER_USER=root
-
-: "${MASTER_HOST:?Set MASTER_HOST to the master LAN IP or resolvable hostname}"
-
-for config_file in \
-    "$HADOOP_HOME/etc/hadoop/core-site.xml" \
-    "$HADOOP_HOME/etc/hadoop/hdfs-site.xml" \
-    "$HADOOP_HOME/etc/hadoop/yarn-site.xml" \
-    "$SPARK_HOME/conf/spark-defaults.conf" \
-    "$SPARK_HOME/conf/spark-env.sh"; do
-    sed -i "s#__MASTER_HOST__#${MASTER_HOST}#g" "$config_file"
-done
+export HADOOP_NICENESS=0
+export YARN_NICENESS=0
+export HADOOP_NAMENODE_NICENESS=0
+export HADOOP_DATANODE_NICENESS=0
+export HADOOP_SECONDARYNAMENODE_NICENESS=0
+export YARN_RESOURCEMANAGER_NICENESS=0
+export YARN_NODEMANAGER_NICENESS=0
+NN_LOCAL_URI=hdfs://127.0.0.1:9000
 
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
@@ -42,12 +39,19 @@ if [ ! -f /hadoop_data/namenode/formatted ]; then
 fi
 
 echo ">>> [MASTER] Starting NameNode..."
-$HADOOP_HOME/bin/hdfs --daemon start namenode
+if ! $HADOOP_HOME/bin/hdfs --daemon start namenode; then
+    echo ">>> [MASTER][ERROR] Failed to start NameNode. Dumping diagnostics..."
+    ls -la "$HADOOP_HOME/logs" || true
+    tail -n 200 "$HADOOP_HOME"/logs/*namenode* 2>/dev/null || true
+    tail -n 200 "$HADOOP_HOME"/logs/hadoop-*-master-*.out 2>/dev/null || true
+    ps -ef | grep -E 'NameNode|namenode' | grep -v grep || true
+    exit 1
+fi
 sleep 8
 
 echo ">>> [MASTER] Checking HDFS availability..."
 for i in $(seq 1 10); do
-    if $HADOOP_HOME/bin/hdfs dfs -ls / >/dev/null 2>&1; then
+    if $HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -ls / >/dev/null 2>&1; then
         echo ">>> [MASTER] HDFS is UP!"
         break
     fi
@@ -55,36 +59,43 @@ for i in $(seq 1 10); do
     sleep 3
 done
 
+echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
+$HADOOP_HOME/bin/hdfs --daemon start datanode
+sleep 2
+
 $HADOOP_HOME/bin/hdfs --daemon start secondarynamenode || true
 
 echo ">>> [MASTER] Waiting for NameNode to leave safe mode..."
+SAFE_MODE_OFF=false
 for i in $(seq 1 30); do
-    SAFE_MODE_STATE=$($HADOOP_HOME/bin/hdfs dfsadmin -safemode get 2>/dev/null || true)
+    SAFE_MODE_STATE=$($HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_LOCAL_URI" -safemode get 2>/dev/null || true)
     if echo "$SAFE_MODE_STATE" | grep -qi "OFF"; then
         echo ">>> [MASTER] NameNode safe mode is OFF."
+        SAFE_MODE_OFF=true
         break
     fi
     echo "    Safe mode still ON. Retrying in 3s... ($i/30)"
     sleep 3
 done
 
+if [ "$SAFE_MODE_OFF" != "true" ]; then
+    echo ">>> [MASTER] Forcing safe mode OFF after timeout..."
+    $HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_LOCAL_URI" -safemode leave || true
+fi
+
 echo ">>> [MASTER] Preparing HDFS filesystem..."
 # $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/raw_data
 # $HADOOP_HOME/bin/hdfs dfs -mkdir -p /user/taxi/results
-$HADOOP_HOME/bin/hdfs dfs -mkdir -p /user
-$HADOOP_HOME/bin/hdfs dfs -mkdir -p /spark-logs
-$HADOOP_HOME/bin/hdfs dfs -mkdir -p /tmp/spark-events
-$HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /user
-$HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /spark-logs
-$HADOOP_HOME/bin/hdfs dfs -chmod -R 777 /tmp/spark-events
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -mkdir -p /user
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -mkdir -p /spark-logs
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -mkdir -p /tmp/spark-events
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -chmod -R 777 /user
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -chmod -R 777 /spark-logs
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -chmod -R 777 /tmp/spark-events
 
 echo ">>> [MASTER] Starting YARN ResourceManager..."
 $HADOOP_HOME/bin/yarn --daemon start resourcemanager
 sleep 3
-
-echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
-$HADOOP_HOME/bin/hdfs --daemon start datanode
-sleep 2
 
 echo ">>> [MASTER] Starting NodeManager on master (hybrid mode)..."
 $HADOOP_HOME/bin/yarn --daemon start nodemanager

@@ -2,27 +2,31 @@
 <configuration>
     <property>
         <name>yarn.resourcemanager.hostname</name>
-        <value>__MASTER_HOST__</value>
+        <value>192.168.1.111</value>
+    </property>
+    <property>
+        <name>yarn.resourcemanager.bind-host</name>
+        <value>0.0.0.0</value>
     </property>
     <property>
         <name>yarn.resourcemanager.address</name>
-        <value>__MASTER_HOST__:8032</value>
+        <value>192.168.1.111:8032</value>
     </property>
     <property>
         <name>yarn.resourcemanager.scheduler.address</name>
-        <value>__MASTER_HOST__:8030</value>
+        <value>192.168.1.111:8030</value>
     </property>
     <property>
         <name>yarn.resourcemanager.resource-tracker.address</name>
-        <value>__MASTER_HOST__:8031</value>
+        <value>192.168.1.111:8031</value>
     </property>
     <property>
         <name>yarn.resourcemanager.admin.address</name>
-        <value>__MASTER_HOST__:8033</value>
+        <value>192.168.1.111:8033</value>
     </property>
     <property>
         <name>yarn.resourcemanager.webapp.address</name>
-        <value>__MASTER_HOST__:8088</value>
+        <value>192.168.1.111:8088</value>
     </property>
     <property>
         <name>yarn.nodemanager.resource.memory-mb</name>
