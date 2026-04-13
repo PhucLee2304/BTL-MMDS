@@ -5,6 +5,6 @@ export YARN_CONF_DIR=/opt/hadoop/etc/hadoop
 export SPARK_DRIVER_MEMORY=2g
 # export SPARK_EXECUTOR_MEMORY=2g
 # export SPARK_EXECUTOR_CORES=2
-export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=hdfs://__MASTER_HOST__:9000/spark-logs"
+export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=hdfs://192.168.1.111:9000/spark-logs"
 export PYSPARK_PYTHON=python3
 export PYSPARK_DRIVER_PYTHON=python3

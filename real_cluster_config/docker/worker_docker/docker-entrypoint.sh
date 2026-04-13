@@ -9,17 +9,13 @@ export HDFS_DATANODE_USER=root
 export HDFS_SECONDARYNAMENODE_USER=root
 export YARN_RESOURCEMANAGER_USER=root
 export YARN_NODEMANAGER_USER=root
-
-: "${MASTER_HOST:?Set MASTER_HOST to the master LAN IP or resolvable hostname}"
-
-for config_file in \
-    "$HADOOP_HOME/etc/hadoop/core-site.xml" \
-    "$HADOOP_HOME/etc/hadoop/hdfs-site.xml" \
-    "$HADOOP_HOME/etc/hadoop/yarn-site.xml" \
-    "$SPARK_HOME/conf/spark-defaults.conf" \
-    "$SPARK_HOME/conf/spark-env.sh"; do
-    sed -i "s#__MASTER_HOST__#${MASTER_HOST}#g" "$config_file"
-done
+export HADOOP_NICENESS=0
+export YARN_NICENESS=0
+export HADOOP_NAMENODE_NICENESS=0
+export HADOOP_DATANODE_NICENESS=0
+export HADOOP_SECONDARYNAMENODE_NICENESS=0
+export YARN_RESOURCEMANAGER_NICENESS=0
+export YARN_NODEMANAGER_NICENESS=0
 
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
