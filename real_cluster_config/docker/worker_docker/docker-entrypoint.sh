@@ -16,6 +16,7 @@ export HADOOP_SECONDARYNAMENODE_NICENESS=0
 NN_HOST=192.168.1.111
 NN_PORT=9000
 NN_URI=hdfs://${NN_HOST}:${NN_PORT}
+DN_ADVERTISED_HOST=${WORKER_HOST_IP:-$(hostname)}
 
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
@@ -44,6 +45,8 @@ done
 echo ">>> [WORKER] Connected to Master!"
 
 echo ">>> [WORKER] Starting DataNode..."
+export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.datanode.hostname=${DN_ADVERTISED_HOST} -Ddfs.datanode.address=0.0.0.0:9866 -Ddfs.datanode.ipc.address=0.0.0.0:9867 -Ddfs.datanode.http.address=0.0.0.0:9864"
+echo ">>> [WORKER] DataNode advertised host: ${DN_ADVERTISED_HOST}"
 $HADOOP_HOME/bin/hdfs --daemon start datanode
 sleep 2
 

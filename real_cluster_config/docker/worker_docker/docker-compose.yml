@@ -8,9 +8,10 @@ services:
     image: hadoop-spark-worker:real
     container_name: worker
     network_mode: host
+    env_file:
+      - ./.env
     environment:
       - NODE_TYPE=worker
-      - MASTER_HOST
       - HDFS_DATANODE_USER=root
       - YARN_NODEMANAGER_USER=root
     volumes:

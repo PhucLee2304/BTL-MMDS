@@ -59,7 +59,7 @@ done
 echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
 # In Docker Desktop NAT mode, the master container may not reach its own LAN IP reliably.
 # Override only local DataNode -> NameNode RPC target to loopback so at least one DataNode is always available.
-export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.namenode.rpc-address=127.0.0.1:9000"
+export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.namenode.rpc-address=127.0.0.1:9000 -Ddfs.datanode.hostname=127.0.0.1 -Ddfs.datanode.address=127.0.0.1:9866 -Ddfs.datanode.ipc.address=127.0.0.1:9867 -Ddfs.datanode.http.address=127.0.0.1:9864"
 $HADOOP_HOME/bin/hdfs --daemon start datanode
 sleep 2
 
