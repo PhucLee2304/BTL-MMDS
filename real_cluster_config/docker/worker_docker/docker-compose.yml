@@ -15,7 +15,7 @@ services:
       - HDFS_DATANODE_USER=root
       - YARN_NODEMANAGER_USER=root
     volumes:
-      - hadoop_datanode:/hadoop_data/datanode
+      - ./volumes/datanode:/hadoop_data/datanode
       - ../../config:/workspace/config
       - ../../../code:/workspace/code
       - ../../../data:/workspace/data
@@ -25,5 +25,4 @@ services:
     #       memory: 10G
     mem_limit: 10g
 
-volumes:
-  hadoop_datanode:
+# Named volumes removed: bind mounts used instead to fix 0-capacity on Windows/WSL2 Docker Desktop
