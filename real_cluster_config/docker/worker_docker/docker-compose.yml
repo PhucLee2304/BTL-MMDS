@@ -15,7 +15,9 @@ services:
       - HDFS_DATANODE_USER=root
       - YARN_NODEMANAGER_USER=root
     volumes:
-      - ./volumes/datanode:/hadoop_data/datanode
+      # DataNode MUST use a Docker named volume (stored in WSL2's ext4).
+      # Windows bind-mounts (9p fs) make Java's File.getTotalSpace() return 0.
+      - hadoop_datanode:/hadoop_data/datanode
       - ../../config:/workspace/config
       - ../../../code:/workspace/code
       - ../../../data:/workspace/data
@@ -25,4 +27,5 @@ services:
     #       memory: 10G
     mem_limit: 10g
 
-# Named volumes removed: bind mounts used instead to fix 0-capacity on Windows/WSL2 Docker Desktop
+volumes:
+  hadoop_datanode:

@@ -18,6 +18,8 @@ services:
       - "8033:8033"
       - "18080:18080"
       - "9866:9866"
+      - "9867:9867"
+      - "9864:9864"
     environment:
       - NODE_TYPE=master
       - HDFS_NAMENODE_USER=root
@@ -26,8 +28,8 @@ services:
       - YARN_RESOURCEMANAGER_USER=root
       - YARN_NODEMANAGER_USER=root
     volumes:
-      - ./volumes/namenode:/hadoop_data/namenode
-      - ./volumes/datanode:/hadoop_data/datanode
+      - hadoop_namenode:/hadoop_data/namenode
+      - hadoop_datanode_master:/hadoop_data/datanode
       - ../../config:/workspace/config
       - ../../../code:/workspace/code
       - ../../../data:/workspace/data
@@ -37,4 +39,6 @@ services:
     #       memory: 12G
     mem_limit: 12g
 
-# Named volumes removed: bind mounts used instead to fix 0-capacity on Windows/WSL2 Docker Desktop
+volumes:
+  hadoop_namenode:
+  hadoop_datanode_master:
