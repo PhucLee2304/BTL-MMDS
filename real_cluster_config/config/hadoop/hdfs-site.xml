@@ -52,11 +52,7 @@
         <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
         <value>false</value>
     </property>
-    <!-- DataNode hostname & client resolution:
-         use.datanode.hostname=true  → DataNode registers with its configured hostname
-         client.use.datanode.hostname=true → HDFS client connects to DataNode by hostname
-         dfs.datanode.hostname is injected at container startup (entrypoint.sh)
-         with the real LAN IP, so "hostname" = LAN IP = always reachable via Docker port proxy -->
+    <!-- dfs.datanode.hostname is injected at container startup via entrypoint.sh -->
     <property>
         <name>dfs.datanode.use.datanode.hostname</name>
         <value>true</value>
