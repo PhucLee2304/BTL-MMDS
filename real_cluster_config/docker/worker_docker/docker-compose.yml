@@ -7,7 +7,16 @@ services:
       dockerfile: docker/worker_docker/Dockerfile
     image: hadoop-spark-worker:real
     container_name: worker
-    network_mode: host
+    # Docker Desktop on Windows does NOT support network_mode:host.
+    # Container runs inside WSL2 VM (192.168.65.x), NOT the Windows host.
+    # Port-mapping mode is required: Docker Desktop proxies LAN_IP:port → container:port.
+    ports:
+      - "9866:9866"    # DataNode data transfer
+      - "9867:9867"    # DataNode IPC
+      - "9864:9864"    # DataNode HTTP
+      - "8042:8042"    # NodeManager HTTP
+      - "8040:8040"    # NodeManager localizer
+      - "8041:8041"    # NodeManager shuffle
     env_file:
       - ./.env
     environment:
@@ -21,10 +30,6 @@ services:
       - ../../config:/workspace/config
       - ../../../code:/workspace/code
       - ../../../data:/workspace/data
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 10G
     mem_limit: 10g
 
 volumes:
