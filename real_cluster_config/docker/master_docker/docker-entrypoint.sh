@@ -25,6 +25,12 @@ NN_LOCAL_URI=hdfs://127.0.0.1:9000
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true
 
+# Inject dfs.datanode.hostname into hdfs-site.xml at runtime.
+# This tells the DataNode to register with the LAN IP, not Docker's internal IP.
+# JVM -D flags via HDFS_DATANODE_OPTS do NOT reliably override this in Hadoop 3.x.
+sed -i "s|</configuration>|  <property>\n    <name>dfs.datanode.hostname</name>\n    <value>${MASTER_LAN_IP}</value>\n  </property>\n</configuration>|" "$HADOOP_HOME/etc/hadoop/hdfs-site.xml"
+echo ">>> [CONFIG] Injected dfs.datanode.hostname=${MASTER_LAN_IP} into hdfs-site.xml"
+
 echo "========================================="
 echo "Starting NYC Taxi Mining Container"
 echo "Role: ${NODE_TYPE} / Hostname: $(hostname)"
@@ -64,10 +70,8 @@ for i in $(seq 1 10); do
 done
 
 echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
-# Advertise the LAN IP so remote workers and clients can reach this DataNode
-# via Docker Desktop's port-mapping (LAN_IP:9866 → container:9866).
-export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.datanode.hostname=${MASTER_LAN_IP} -Ddfs.datanode.address=0.0.0.0:9866 -Ddfs.datanode.ipc.address=0.0.0.0:9867 -Ddfs.datanode.http.address=0.0.0.0:9864"
 echo ">>> [MASTER] DataNode advertised hostname: ${MASTER_LAN_IP}"
+export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.datanode.address=0.0.0.0:9866 -Ddfs.datanode.ipc.address=0.0.0.0:9867 -Ddfs.datanode.http.address=0.0.0.0:9864"
 $HADOOP_HOME/bin/hdfs --daemon start datanode
 sleep 2
 
