@@ -24,6 +24,9 @@ services:
       - "9867:9867"    # DataNode IPC
       - "9864:9864"    # DataNode HTTP
       - "8042:8042"    # NodeManager HTTP
+      - "8080:8080"
+      - "4040:4040"
+      - "8888:8888"
     env_file:
       - ./.env
     environment:
