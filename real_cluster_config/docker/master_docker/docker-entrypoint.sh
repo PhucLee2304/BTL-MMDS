@@ -14,9 +14,12 @@ export HADOOP_NAMENODE_NICENESS=0
 export HADOOP_DATANODE_NICENESS=0
 export HADOOP_SECONDARYNAMENODE_NICENESS=0
 
-# Use the LAN IP consistently (must match core-site.xml fs.defaultFS)
+# MASTER_HOST = the LAN IP of the Windows host running this container.
+# Docker Desktop on Windows: containers are inside WSL2 VM (192.168.65.x),
+# so we use 127.0.0.1 for LOCAL NameNode access (same container),
+# but advertise the LAN IP for services that remote nodes connect to.
 MASTER_LAN_IP=${MASTER_HOST:-192.168.1.111}
-NN_URI=hdfs://${MASTER_LAN_IP}:9000
+NN_LOCAL_URI=hdfs://127.0.0.1:9000
 
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
@@ -52,7 +55,7 @@ sleep 8
 
 echo ">>> [MASTER] Checking HDFS availability..."
 for i in $(seq 1 10); do
-    if $HADOOP_HOME/bin/hdfs dfs -fs "$NN_URI" -ls / >/dev/null 2>&1; then
+    if $HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -ls / >/dev/null 2>&1; then
         echo ">>> [MASTER] HDFS is UP!"
         break
     fi
@@ -61,8 +64,10 @@ for i in $(seq 1 10); do
 done
 
 echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
-# Advertise the real LAN IP so remote workers and clients can reach this DataNode
+# Advertise the LAN IP so remote workers and clients can reach this DataNode
+# via Docker Desktop's port-mapping (LAN_IP:9866 → container:9866).
 export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.datanode.hostname=${MASTER_LAN_IP} -Ddfs.datanode.address=0.0.0.0:9866 -Ddfs.datanode.ipc.address=0.0.0.0:9867 -Ddfs.datanode.http.address=0.0.0.0:9864"
+echo ">>> [MASTER] DataNode advertised hostname: ${MASTER_LAN_IP}"
 $HADOOP_HOME/bin/hdfs --daemon start datanode
 sleep 2
 
@@ -74,7 +79,7 @@ fi
 echo ">>> [MASTER] Waiting for at least one live DataNode..."
 DN_LIVE=false
 for i in $(seq 1 20); do
-    DN_REPORT=$($HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_URI" -report 2>&1 || true)
+    DN_REPORT=$($HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_LOCAL_URI" -report 2>&1 || true)
     if echo "$DN_REPORT" | grep -Eqi "Live datanodes \([1-9][0-9]*\)"; then
         echo ">>> [MASTER] Live DataNode detected."
         DN_LIVE=true
@@ -96,7 +101,7 @@ done
 if [ "$DN_LIVE" != "true" ]; then
     echo ">>> [MASTER][WARN] No live DataNode detected after timeout. Dumping DataNode diagnostics..."
     tail -n 200 "$HADOOP_HOME"/logs/*datanode* 2>/dev/null || true
-    $HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_URI" -report 2>&1 || true
+    $HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_LOCAL_URI" -report 2>&1 || true
 fi
 
 $HADOOP_HOME/bin/hdfs --daemon start secondarynamenode || true
@@ -104,7 +109,7 @@ $HADOOP_HOME/bin/hdfs --daemon start secondarynamenode || true
 echo ">>> [MASTER] Waiting for NameNode to leave safe mode..."
 SAFE_MODE_OFF=false
 for i in $(seq 1 30); do
-    SAFE_MODE_STATE=$($HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_URI" -safemode get 2>/dev/null || true)
+    SAFE_MODE_STATE=$($HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_LOCAL_URI" -safemode get 2>/dev/null || true)
     if echo "$SAFE_MODE_STATE" | grep -qi "OFF"; then
         echo ">>> [MASTER] NameNode safe mode is OFF."
         SAFE_MODE_OFF=true
@@ -116,16 +121,16 @@ done
 
 if [ "$SAFE_MODE_OFF" != "true" ]; then
     echo ">>> [MASTER] Forcing safe mode OFF after timeout..."
-    $HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_URI" -safemode leave || true
+    $HADOOP_HOME/bin/hdfs dfsadmin -fs "$NN_LOCAL_URI" -safemode leave || true
 fi
 
 echo ">>> [MASTER] Preparing HDFS filesystem..."
-$HADOOP_HOME/bin/hdfs dfs -fs "$NN_URI" -mkdir -p /user
-$HADOOP_HOME/bin/hdfs dfs -fs "$NN_URI" -mkdir -p /spark-logs
-$HADOOP_HOME/bin/hdfs dfs -fs "$NN_URI" -mkdir -p /tmp/spark-events
-$HADOOP_HOME/bin/hdfs dfs -fs "$NN_URI" -chmod -R 777 /user
-$HADOOP_HOME/bin/hdfs dfs -fs "$NN_URI" -chmod -R 777 /spark-logs
-$HADOOP_HOME/bin/hdfs dfs -fs "$NN_URI" -chmod -R 777 /tmp/spark-events
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -mkdir -p /user
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -mkdir -p /spark-logs
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -mkdir -p /tmp/spark-events
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -chmod -R 777 /user
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -chmod -R 777 /spark-logs
+$HADOOP_HOME/bin/hdfs dfs -fs "$NN_LOCAL_URI" -chmod -R 777 /tmp/spark-events
 
 echo ">>> [MASTER] Starting YARN ResourceManager..."
 $HADOOP_HOME/bin/yarn --daemon start resourcemanager

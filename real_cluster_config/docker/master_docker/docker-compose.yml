@@ -7,7 +7,23 @@ services:
       dockerfile: docker/master_docker/Dockerfile
     image: hadoop-spark-master:real
     container_name: master
-    network_mode: host
+    # Docker Desktop on Windows does NOT support network_mode:host.
+    # Container runs inside WSL2 VM (IP 192.168.65.x), NOT the Windows host.
+    # Port-mapping mode is required: Docker Desktop proxies LAN_IP:port → container:port.
+    ports:
+      - "9000:9000"    # NameNode RPC
+      - "9870:9870"    # NameNode HTTP UI
+      - "9868:9868"    # SecondaryNameNode HTTP
+      - "8088:8088"    # YARN ResourceManager UI
+      - "8030:8030"    # YARN Scheduler
+      - "8031:8031"    # YARN ResourceTracker
+      - "8032:8032"    # YARN ResourceManager
+      - "8033:8033"    # YARN Admin
+      - "18080:18080"  # Spark History Server
+      - "9866:9866"    # DataNode data transfer
+      - "9867:9867"    # DataNode IPC
+      - "9864:9864"    # DataNode HTTP
+      - "8042:8042"    # NodeManager HTTP
     env_file:
       - ./.env
     environment:
