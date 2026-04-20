@@ -18,18 +18,27 @@ NN_PORT=9000
 NN_URI=hdfs://${NN_HOST}:${NN_PORT}
 DN_ADVERTISED_HOST=${WORKER_HOST_IP:-$(hostname)}
 
+# Each DataNode must use a UNIQUE port so NameNode can distinguish them.
+# Docker Desktop containers all share gateway 172.18.0.1; without unique ports
+# NameNode sees all DataNodes as "172.18.0.1:SAME_PORT" → treats them as one.
+# Use WORKER_DN_PORT from .env (9872 for 112, 9882 for 113, 9892 for 114).
+DN_PORT=${WORKER_DN_PORT:-9872}
+DN_IPC_PORT=$((DN_PORT + 1))   # e.g. 9873
+DN_HTTP_PORT=$((DN_PORT + 2))  # e.g. 9874
+
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true
 
-# Inject dfs.datanode.hostname into hdfs-site.xml at runtime (only once).
-# This tells the DataNode to register with the LAN IP, not Docker's internal IP.
-# JVM -D flags via HDFS_DATANODE_OPTS do NOT reliably override this in Hadoop 3.x.
+# Inject DataNode config into hdfs-site.xml at runtime (only once per fresh volume).
+# dfs.datanode.hostname → LAN IP to use for client connections
+# dfs.datanode.address  → bind address including port (unique per node!)
+# These must be XML properties; JVM -D flags are ignored by Hadoop 3.x config.
 if ! grep -q '<name>dfs.datanode.hostname</name>' "$HADOOP_HOME/etc/hadoop/hdfs-site.xml"; then
-    sed -i "s|</configuration>|  <property>\n    <name>dfs.datanode.hostname</name>\n    <value>${DN_ADVERTISED_HOST}</value>\n  </property>\n</configuration>|" "$HADOOP_HOME/etc/hadoop/hdfs-site.xml"
-    echo ">>> [CONFIG] Injected dfs.datanode.hostname=${DN_ADVERTISED_HOST} into hdfs-site.xml"
+    sed -i "s|</configuration>|  <property>\n    <name>dfs.datanode.hostname</name>\n    <value>${DN_ADVERTISED_HOST}</value>\n  </property>\n  <property>\n    <name>dfs.datanode.address</name>\n    <value>0.0.0.0:${DN_PORT}</value>\n  </property>\n  <property>\n    <name>dfs.datanode.ipc.address</name>\n    <value>0.0.0.0:${DN_IPC_PORT}</value>\n  </property>\n  <property>\n    <name>dfs.datanode.http.address</name>\n    <value>0.0.0.0:${DN_HTTP_PORT}</value>\n  </property>\n</configuration>|" "$HADOOP_HOME/etc/hadoop/hdfs-site.xml"
+    echo ">>> [CONFIG] Injected DataNode config: hostname=${DN_ADVERTISED_HOST}, port=${DN_PORT}"
 else
-    echo ">>> [CONFIG] dfs.datanode.hostname already set in hdfs-site.xml (skipping)"
+    echo ">>> [CONFIG] DataNode config already in hdfs-site.xml (skipping)"
 fi
 
 echo "========================================="
@@ -37,6 +46,7 @@ echo "Starting NYC Taxi Mining Container"
 echo "Role: ${NODE_TYPE} / Hostname: $(hostname)"
 echo "NameNode: ${NN_HOST}:${NN_PORT}"
 echo "Advertised IP: ${DN_ADVERTISED_HOST}"
+echo "DataNode Port: ${DN_PORT}"
 echo "========================================="
 
 service ssh start || true
@@ -56,9 +66,8 @@ until timeout 8s $HADOOP_HOME/bin/hdfs dfs -fs "$NN_URI" -ls / >/dev/null 2>&1; 
 done
 echo ">>> [WORKER] Connected to Master!"
 
-echo ">>> [WORKER] Starting DataNode..."
+echo ">>> [WORKER] Starting DataNode (port ${DN_PORT})..."
 echo ">>> [WORKER] DataNode advertised host: ${DN_ADVERTISED_HOST}"
-export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.datanode.address=0.0.0.0:9866 -Ddfs.datanode.ipc.address=0.0.0.0:9867 -Ddfs.datanode.http.address=0.0.0.0:9864"
 $HADOOP_HOME/bin/hdfs --daemon start datanode
 sleep 2
 
@@ -71,6 +80,7 @@ echo ">>> [WORKER] Spark standalone worker is disabled (Spark-on-YARN profile)."
 echo "========================================="
 echo "WORKER $(hostname) is ONLINE"
 echo "  Advertised IP: ${DN_ADVERTISED_HOST}"
+echo "  DataNode port: ${DN_PORT}"
 echo "========================================="
 
 tail -f /dev/null

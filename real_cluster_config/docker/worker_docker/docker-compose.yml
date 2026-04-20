@@ -8,15 +8,20 @@ services:
     image: hadoop-spark-worker:real
     container_name: worker
     # Docker Desktop on Windows does NOT support network_mode:host.
-    # Container runs inside WSL2 VM (192.168.65.x), NOT the Windows host.
-    # Port-mapping mode is required: Docker Desktop proxies LAN_IP:port → container:port.
+    # Port-mapping: Docker proxies LAN_IP:port → container:port.
+    # CRITICAL: Each worker MUST use unique DataNode ports (WORKER_DN_PORT in .env)
+    # so NameNode can distinguish them. All containers share gateway 172.18.0.1,
+    # so without unique ports they appear as the same DataNode to NameNode.
     ports:
-      - "9866:9866"    # DataNode data transfer
-      - "9867:9867"    # DataNode IPC
-      - "9864:9864"    # DataNode HTTP
-      - "8042:8042"    # NodeManager HTTP
-      - "8040:8040"    # NodeManager localizer
-      - "8041:8041"    # NodeManager shuffle
+      # NodeManager
+      - "8042:8042"
+      - "8040:8040"
+      - "8041:8041"
+      # DataNode ports - unique per worker via WORKER_DN_PORT env var
+      # 112: 9872/9873/9874  |  113: 9882/9883/9884  |  114: 9892/9893/9894
+      - "${WORKER_DN_PORT:-9872}:${WORKER_DN_PORT:-9872}"
+      - "${WORKER_DN_IPC_PORT:-9873}:${WORKER_DN_IPC_PORT:-9873}"
+      - "${WORKER_DN_HTTP_PORT:-9874}:${WORKER_DN_HTTP_PORT:-9874}"
     env_file:
       - ./.env
     environment:
