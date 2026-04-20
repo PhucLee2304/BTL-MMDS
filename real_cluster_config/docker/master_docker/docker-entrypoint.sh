@@ -25,11 +25,15 @@ NN_LOCAL_URI=hdfs://127.0.0.1:9000
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true
 
-# Inject dfs.datanode.hostname into hdfs-site.xml at runtime.
+# Inject dfs.datanode.hostname into hdfs-site.xml at runtime (only once).
 # This tells the DataNode to register with the LAN IP, not Docker's internal IP.
 # JVM -D flags via HDFS_DATANODE_OPTS do NOT reliably override this in Hadoop 3.x.
-sed -i "s|</configuration>|  <property>\n    <name>dfs.datanode.hostname</name>\n    <value>${MASTER_LAN_IP}</value>\n  </property>\n</configuration>|" "$HADOOP_HOME/etc/hadoop/hdfs-site.xml"
-echo ">>> [CONFIG] Injected dfs.datanode.hostname=${MASTER_LAN_IP} into hdfs-site.xml"
+if ! grep -q 'dfs.datanode.hostname' "$HADOOP_HOME/etc/hadoop/hdfs-site.xml"; then
+    sed -i "s|</configuration>|  <property>\n    <name>dfs.datanode.hostname</name>\n    <value>${MASTER_LAN_IP}</value>\n  </property>\n</configuration>|" "$HADOOP_HOME/etc/hadoop/hdfs-site.xml"
+    echo ">>> [CONFIG] Injected dfs.datanode.hostname=${MASTER_LAN_IP} into hdfs-site.xml"
+else
+    echo ">>> [CONFIG] dfs.datanode.hostname already set in hdfs-site.xml (skipping)"
+fi
 
 echo "========================================="
 echo "Starting NYC Taxi Mining Container"
