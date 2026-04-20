@@ -28,6 +28,11 @@
         <name>yarn.resourcemanager.webapp.address</name>
         <value>192.168.1.111:8088</value>
     </property>
+    <!-- NodeManager must bind on all interfaces so it's reachable via LAN IP -->
+    <property>
+        <name>yarn.nodemanager.bind-host</name>
+        <value>0.0.0.0</value>
+    </property>
     <property>
         <name>yarn.nodemanager.resource.memory-mb</name>
         <value>8192</value>
@@ -51,5 +56,14 @@
     <property>
         <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
         <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+    </property>
+    <!-- Disable virtual/physical memory checking to avoid container kills in Docker -->
+    <property>
+        <name>yarn.nodemanager.vmem-check-enabled</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>yarn.nodemanager.pmem-check-enabled</name>
+        <value>false</value>
     </property>
 </configuration>

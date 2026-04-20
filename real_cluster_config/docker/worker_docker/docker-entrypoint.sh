@@ -13,7 +13,7 @@ export HADOOP_NICENESS=0
 export HADOOP_NAMENODE_NICENESS=0
 export HADOOP_DATANODE_NICENESS=0
 export HADOOP_SECONDARYNAMENODE_NICENESS=0
-NN_HOST=192.168.1.111
+NN_HOST=${MASTER_HOST:-192.168.1.111}
 NN_PORT=9000
 NN_URI=hdfs://${NN_HOST}:${NN_PORT}
 DN_ADVERTISED_HOST=${WORKER_HOST_IP:-$(hostname)}
@@ -25,6 +25,8 @@ sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true
 echo "========================================="
 echo "Starting NYC Taxi Mining Container"
 echo "Role: ${NODE_TYPE} / Hostname: $(hostname)"
+echo "NameNode: ${NN_HOST}:${NN_PORT}"
+echo "Advertised IP: ${DN_ADVERTISED_HOST}"
 echo "========================================="
 
 service ssh start || true
@@ -45,6 +47,7 @@ done
 echo ">>> [WORKER] Connected to Master!"
 
 echo ">>> [WORKER] Starting DataNode..."
+# Advertise the real LAN IP so NameNode and clients can reach this DataNode
 export HDFS_DATANODE_OPTS="${HDFS_DATANODE_OPTS} -Ddfs.datanode.hostname=${DN_ADVERTISED_HOST} -Ddfs.datanode.address=0.0.0.0:9866 -Ddfs.datanode.ipc.address=0.0.0.0:9867 -Ddfs.datanode.http.address=0.0.0.0:9864"
 echo ">>> [WORKER] DataNode advertised host: ${DN_ADVERTISED_HOST}"
 $HADOOP_HOME/bin/hdfs --daemon start datanode
@@ -58,6 +61,7 @@ echo ">>> [WORKER] Spark standalone worker is disabled (Spark-on-YARN profile)."
 
 echo "========================================="
 echo "WORKER $(hostname) is ONLINE"
+echo "  Advertised IP: ${DN_ADVERTISED_HOST}"
 echo "========================================="
 
 tail -f /dev/null
