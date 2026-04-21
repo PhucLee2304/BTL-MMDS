@@ -23,6 +23,8 @@ services:
       - "9866:9866"    # DataNode data transfer
       - "9867:9867"    # DataNode IPC
       - "9864:9864"    # DataNode HTTP
+      - "8040:8040"    # NodeManager Localizer
+      - "8041:8041"    # NodeManager IPC
       - "8042:8042"    # NodeManager HTTP
       - "8080:8080"
       - "4040:4040"
