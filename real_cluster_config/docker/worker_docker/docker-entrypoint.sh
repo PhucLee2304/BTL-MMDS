@@ -30,6 +30,21 @@ DN_HTTP_PORT=$((DN_PORT + 2))  # e.g. 9874
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true
 
+# Sync spark-env.sh and spark-defaults.conf from the shared /workspace/config
+# volume into Spark's live conf dir so updates (e.g. SPARK_LOCAL_IP) take
+# effect without a full Docker image rebuild.
+if [ -f /workspace/config/spark/spark-env.sh ]; then
+    cp /workspace/config/spark/spark-env.sh "$SPARK_HOME/conf/spark-env.sh"
+    sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh"
+    chmod 755 "$SPARK_HOME/conf/spark-env.sh"
+    echo ">>> [CONFIG] Synced spark-env.sh from /workspace/config"
+fi
+if [ -f /workspace/config/spark/spark-defaults.conf ]; then
+    cp /workspace/config/spark/spark-defaults.conf "$SPARK_HOME/conf/spark-defaults.conf"
+    sed -i 's/\r$//' "$SPARK_HOME/conf/spark-defaults.conf"
+    echo ">>> [CONFIG] Synced spark-defaults.conf from /workspace/config"
+fi
+
 # Inject DataNode config into hdfs-site.xml at runtime (only once per fresh volume).
 # dfs.datanode.hostname → LAN IP to use for client connections
 # dfs.datanode.address  → bind address including port (unique per node!)
