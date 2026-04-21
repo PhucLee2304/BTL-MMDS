@@ -60,16 +60,17 @@
     <!-- Disable virtual/physical memory checking to avoid container kills in Docker -->
     <property>
         <name>yarn.nodemanager.address</name>
-        <value>0.0.0.0:8041</value>
+        <value>${yarn.nodemanager.hostname}:8041</value>
     </property>
     <property>
         <name>yarn.nodemanager.localizer.address</name>
-        <value>0.0.0.0:8040</value>
+        <value>${yarn.nodemanager.hostname}:8040</value>
     </property>
     <property>
         <name>yarn.nodemanager.webapp.address</name>
-        <value>0.0.0.0:8042</value>
+        <value>${yarn.nodemanager.hostname}:8042</value>
     </property>
+
 
     <property>
         <name>yarn.nodemanager.vmem-check-enabled</name>
