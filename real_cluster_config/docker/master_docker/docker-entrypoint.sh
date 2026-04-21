@@ -35,6 +35,12 @@ else
     echo ">>> [CONFIG] dfs.datanode.hostname already set in hdfs-site.xml (skipping)"
 fi
 
+if ! grep -q '<name>yarn.nodemanager.hostname</name>' "$HADOOP_HOME/etc/hadoop/yarn-site.xml"; then
+    sed -i "s|</configuration>|  <property>\n    <name>yarn.nodemanager.hostname</name>\n    <value>${MASTER_LAN_IP}</value>\n  </property>\n</configuration>|" "$HADOOP_HOME/etc/hadoop/yarn-site.xml"
+    echo ">>> [CONFIG] Injected yarn.nodemanager.hostname=${MASTER_LAN_IP} into yarn-site.xml"
+fi
+
+
 echo "========================================="
 echo "Starting NYC Taxi Mining Container"
 echo "Role: ${NODE_TYPE} / Hostname: $(hostname)"

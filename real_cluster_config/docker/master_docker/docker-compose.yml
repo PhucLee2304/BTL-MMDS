@@ -41,7 +41,7 @@ services:
       - hadoop_datanode_master:/hadoop_data/datanode
       - ../../config:/workspace/config
       - ../../../code:/workspace/code
-      - ../../../data:/workspace/data0
+      - ../../../data:/workspace/data
     mem_limit: 12g
 
 volumes:
