@@ -22,6 +22,10 @@ services:
       - "${WORKER_DN_PORT:-9872}:${WORKER_DN_PORT:-9872}"
       - "${WORKER_DN_IPC_PORT:-9873}:${WORKER_DN_IPC_PORT:-9873}"
       - "${WORKER_DN_HTTP_PORT:-9874}:${WORKER_DN_HTTP_PORT:-9874}"
+      # Spark Driver & Block Managers
+      - "7078:7078"
+      - "7079:7079"
+      - "7080:7080"
     env_file:
       - ./.env
     environment:

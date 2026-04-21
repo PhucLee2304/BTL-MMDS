@@ -30,7 +30,8 @@ services:
       - "4040:4040"
       - "8888:8888"
       - "7078:7078"    # Spark Driver
-      - "7079:7079"    # Spark BlockManager
+      - "7079:7079"    # Spark BlockManager 1
+      - "7080:7080"    # Spark BlockManager 2
     env_file:
       - ./.env
     environment:
