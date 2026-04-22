@@ -22,7 +22,7 @@ DN_ADVERTISED_HOST=${WORKER_HOST_IP:-$(hostname)}
 # inside this container) can bind() on it. Without this, bind() fails with
 # "Cannot assign requested address" because 192.168.1.x is NOT a local
 # interface inside Docker — it only exists on the Windows host.
-ip addr add ${DN_ADVERTISED_HOST}/32 dev lo 2>/dev/null || true
+ifconfig lo:0 ${DN_ADVERTISED_HOST} netmask 255.255.255.255 up || true
 
 # Each DataNode must use a UNIQUE port so NameNode can distinguish them.
 # Docker Desktop containers all share gateway 172.18.0.1; without unique ports

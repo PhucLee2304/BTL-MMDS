@@ -25,7 +25,7 @@ NN_LOCAL_URI=hdfs://127.0.0.1:9000
 # inside this container) can bind() on it. Without this, bind() fails with
 # "Cannot assign requested address" because 192.168.1.x is NOT a local
 # interface inside Docker — it only exists on the Windows host.
-ip addr add ${MASTER_LAN_IP}/32 dev lo 2>/dev/null || true
+ifconfig lo:0 ${MASTER_LAN_IP} netmask 255.255.255.255 up || true
 
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
