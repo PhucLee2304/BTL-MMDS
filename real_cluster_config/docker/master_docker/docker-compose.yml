@@ -32,6 +32,8 @@ services:
       - "7078:7078"    # Spark Driver
       - "7079:7079"    # Spark BlockManager 1
       - "7080:7080"    # Spark BlockManager 2
+    cap_add:
+      - NET_ADMIN
     env_file:
       - ./.env
     environment:

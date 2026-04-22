@@ -21,6 +21,12 @@ export HADOOP_SECONDARYNAMENODE_NICENESS=0
 MASTER_LAN_IP=${MASTER_HOST:-192.168.1.111}
 NN_LOCAL_URI=hdfs://127.0.0.1:9000
 
+# Add the LAN IP as a loopback alias so Spark executors (launched by YARN
+# inside this container) can bind() on it. Without this, bind() fails with
+# "Cannot assign requested address" because 192.168.1.x is NOT a local
+# interface inside Docker — it only exists on the Windows host.
+ip addr add ${MASTER_LAN_IP}/32 dev lo 2>/dev/null || true
+
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true

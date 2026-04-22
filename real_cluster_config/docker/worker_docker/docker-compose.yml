@@ -26,6 +26,8 @@ services:
       - "7078:7078"
       - "7079:7079"
       - "7080:7080"
+    cap_add:
+      - NET_ADMIN
     env_file:
       - ./.env
     environment:
