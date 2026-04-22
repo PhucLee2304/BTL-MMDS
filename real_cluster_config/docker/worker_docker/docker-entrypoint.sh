@@ -24,6 +24,13 @@ DN_ADVERTISED_HOST=${WORKER_HOST_IP:-$(hostname)}
 # interface inside Docker — it only exists on the Windows host.
 ifconfig lo:0 ${DN_ADVERTISED_HOST} netmask 255.255.255.255 up || true
 
+# Start Python port proxy to forward DNAT traffic from eth0 (Docker bridge) to the loopback alias.
+# Spark executors bind to the loopback alias, but Docker NAT redirects external traffic to the container's eth0 IP.
+# We must forward port 7080 so the inter-node executor shuffle works.
+ETH0_IP=$(hostname -I | awk '{print $1}')
+nohup python3 /workspace/config/proxy.py ${ETH0_IP} ${DN_ADVERTISED_HOST} 7080 > /tmp/proxy_7080.log 2>&1 &
+
+
 # Each DataNode must use a UNIQUE port so NameNode can distinguish them.
 # Docker Desktop containers all share gateway 172.18.0.1; without unique ports
 # NameNode sees all DataNodes as "172.18.0.1:SAME_PORT" → treats them as one.

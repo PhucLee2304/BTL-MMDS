@@ -27,6 +27,13 @@ NN_LOCAL_URI=hdfs://127.0.0.1:9000
 # interface inside Docker — it only exists on the Windows host.
 ifconfig lo:0 ${MASTER_LAN_IP} netmask 255.255.255.255 up || true
 
+# Start Python port proxy to forward DNAT traffic from eth0 (Docker bridge) to the loopback alias.
+# Spark executors bind to the loopback alias, but Docker NAT redirects external traffic to the container's eth0 IP.
+# We must forward port 7080 so the inter-node executor shuffle works.
+ETH0_IP=$(hostname -I | awk '{print $1}')
+nohup python3 /workspace/config/proxy.py ${ETH0_IP} ${MASTER_LAN_IP} 7080 > /tmp/proxy_7080.log 2>&1 &
+
+
 # Windows checkouts may introduce CRLF which breaks Hadoop/Spark env scripts.
 sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/hadoop-env.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$SPARK_HOME/conf/spark-env.sh" 2>/dev/null || true
