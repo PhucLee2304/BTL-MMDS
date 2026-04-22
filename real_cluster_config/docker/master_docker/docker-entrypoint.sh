@@ -38,6 +38,13 @@ if [ -f /workspace/config/spark/spark-defaults.conf ]; then
     echo ">>> [CONFIG] Synced spark-defaults.conf from /workspace/config"
 fi
 
+# Sync Hadoop config from the shared /workspace/config volume.
+# This MUST happen BEFORE the runtime hostname injection below.
+if [ -f /workspace/config/hadoop/yarn-site.xml ]; then
+    cp /workspace/config/hadoop/yarn-site.xml "$HADOOP_HOME/etc/hadoop/yarn-site.xml"
+    sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/yarn-site.xml"
+    echo ">>> [CONFIG] Synced yarn-site.xml from /workspace/config"
+fi
 
 # Inject dfs.datanode.hostname into hdfs-site.xml at runtime (only once).
 # This tells the DataNode to register with the LAN IP, not Docker's internal IP.

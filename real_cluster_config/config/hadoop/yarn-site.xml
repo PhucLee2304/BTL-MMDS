@@ -43,7 +43,7 @@
     </property>
     <property>
         <name>yarn.scheduler.maximum-allocation-mb</name>
-        <value>4096</value>
+        <value>8192</value>
     </property>
     <property>
         <name>yarn.scheduler.minimum-allocation-mb</name>

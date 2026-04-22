@@ -45,6 +45,14 @@ if [ -f /workspace/config/spark/spark-defaults.conf ]; then
     echo ">>> [CONFIG] Synced spark-defaults.conf from /workspace/config"
 fi
 
+# Sync Hadoop config from the shared /workspace/config volume.
+# This MUST happen BEFORE the runtime hostname injection below.
+if [ -f /workspace/config/hadoop/yarn-site.xml ]; then
+    cp /workspace/config/hadoop/yarn-site.xml "$HADOOP_HOME/etc/hadoop/yarn-site.xml"
+    sed -i 's/\r$//' "$HADOOP_HOME/etc/hadoop/yarn-site.xml"
+    echo ">>> [CONFIG] Synced yarn-site.xml from /workspace/config"
+fi
+
 # Inject DataNode config into hdfs-site.xml at runtime (only once per fresh volume).
 # dfs.datanode.hostname → LAN IP to use for client connections
 # dfs.datanode.address  → bind address including port (unique per node!)
