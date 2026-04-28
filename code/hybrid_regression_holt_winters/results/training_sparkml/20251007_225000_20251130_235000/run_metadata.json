@@ -1,9 +1,0 @@
-{
-  "run_id": "20251007_225000_20251130_235000",
-  "feature_path": "/user/data/feature_engineering/demand_prediction_features",
-  "effective_start": "2025-10-07 22:50:00",
-  "effective_end": "2025-11-30 23:50:00",
-  "hdfs_output_base": "/user/data/results/demand_prediction/sparkml/20251007_225000_20251130_235000",
-  "best_model": "random_forest",
-  "best_model_local_path": "/workspace/code/hybrid_regression_holt_winters/models/training_sparkml/20251007_225000_20251130_235000/best_model_pipeline"
-}

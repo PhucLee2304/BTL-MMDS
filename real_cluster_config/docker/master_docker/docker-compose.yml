@@ -1,4 +1,4 @@
-name: mmds
+name: mmds_cluster
 
 services:
   master:
