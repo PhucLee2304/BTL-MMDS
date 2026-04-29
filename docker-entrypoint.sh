@@ -49,6 +49,10 @@ if [ "$NODE_ROLE" = "master" ]; then
 
     $HADOOP_HOME/bin/hdfs --daemon start secondarynamenode || true
 
+    echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
+    $HADOOP_HOME/bin/hdfs --daemon start datanode
+    sleep 2
+
     echo ">>> [MASTER] Waiting for NameNode to leave safe mode..."
     for i in $(seq 1 30); do
         SAFE_MODE_STATE=$($HADOOP_HOME/bin/hdfs dfsadmin -safemode get 2>/dev/null || true)
@@ -73,10 +77,6 @@ if [ "$NODE_ROLE" = "master" ]; then
     echo ">>> [MASTER] Starting YARN ResourceManager..."
     $HADOOP_HOME/bin/yarn --daemon start resourcemanager
     sleep 3
-
-    echo ">>> [MASTER] Starting DataNode on master (hybrid mode)..."
-    $HADOOP_HOME/bin/hdfs --daemon start datanode
-    sleep 2
 
     echo ">>> [MASTER] Starting NodeManager on master (hybrid mode)..."
     $HADOOP_HOME/bin/yarn --daemon start nodemanager
