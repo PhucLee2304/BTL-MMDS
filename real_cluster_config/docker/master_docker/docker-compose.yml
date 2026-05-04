@@ -1,12 +1,12 @@
 name: mmds_cluster
 
 services:
-  master:
+  master_:
     build:
       context: ../..
       dockerfile: docker/master_docker/Dockerfile
     image: hadoop-spark-master:real
-    container_name: master
+    container_name: master_
     # Docker Desktop on Windows does NOT support network_mode:host.
     # Container runs inside WSL2 VM (IP 192.168.65.x), NOT the Windows host.
     # Port-mapping mode is required: Docker Desktop proxies LAN_IP:port → container:port.

@@ -66,6 +66,10 @@ Cần cấu hình cố định trước:
 - Địa chỉ IP LAN của từng máy trạm (ví dụ: 192.168.1.112, 192.168.1.113, 192.168.1.114).
 - Bộ cổng DataNode duy nhất cho mỗi máy trạm.
 
+Test ping giữa các máy theo ip cố định trên, nếu không ping được kiểm tra: Tại mục Inbound Rules (Windows Defender Firewall), tìm dòng File and Printer Sharing (Echo Request - ICMPv4-In), xác nhận đã Enable Rule (public and private network).
+
+Mở các port cần thiết bằng cách chạy script: '.\scripts\open_firewall_ports.ps1' (nếu không chạy dược có thể thử chạy lệnh sau trước: 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser', sau đó chạy lại script)
+
 ### Bước 1: chuẩn bị mã nguồn
 
 Tất cả các máy cần có cùng một phiên bản mã nguồn. Sử dụng Git để đồng bộ
