@@ -216,3 +216,24 @@ for node in hadoop-worker-1 hadoop-worker-2; do
     ssh $node "~/BTL-MMDS/env/bin/pip install -r ~/BTL-MMDS/requirements.txt"
 done
 ```
+
+- chạy jupyter notebook trên master, không tắt terminal.
+```bash
+jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser
+```
+
+- nếu không muốn tắt terminal thì:
+```bash
+nohup jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser > jupyter_log.txt 2>&1 &
+```
+
+- Để tắt:
+```bash
+ps aux | grep jupyter
+kill -9 <PID>
+```
+
+- xem file log để lấy token
+```bash
+cat jupyter_log.txt
+```
