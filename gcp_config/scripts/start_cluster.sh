@@ -14,12 +14,10 @@ fi
 start-dfs.sh
 start-yarn.sh
 
-echo "Đang chờ NameNode mở cổng 9000..."
-sleep 10
+echo "Đang chờ NameNode thoát Safe Mode hoàn toàn..."
+hdfs dfsadmin -safemode wait
 
 hdfs dfs -mkdir -p /spark-logs /user/spark
 hdfs dfs -chmod -R 1777 /spark-logs /user/spark
-
-echo "HDFS and YARN started."
 
 echo "HDFS and YARN started."
