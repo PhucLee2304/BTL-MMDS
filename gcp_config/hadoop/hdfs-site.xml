@@ -10,6 +10,6 @@
     </property>
     <property>
         <name>dfs.datanode.data.dir</name>
-        <value>file:///data/hdfs/dn</value>
+        <value>file:///data/hdfs/dn,file:///mnt/data_disk/hadoop_data</value>
     </property>
 </configuration>
