@@ -18,14 +18,22 @@
     </property>
     <property>
         <name>yarn.nodemanager.resource.cpu-vcores</name>
-        <value>4</value>
+        <value>3</value>
     </property>
     <property>
         <name>yarn.scheduler.maximum-allocation-vcores</name>
-        <value>4</value>
+        <value>3</value>
     </property>
     <property>
         <name>yarn.log-aggregation-enable</name>
         <value>true</value>
+    </property>
+    <property>
+        <name>yarn.nodemanager.local-dirs</name>
+        <value>file:///mnt/data_disk/yarn/local</value>
+    </property>
+    <property>
+        <name>yarn.nodemanager.log-dirs</name>
+        <value>file:///mnt/data_disk/yarn/logs</value>
     </property>
 </configuration>
