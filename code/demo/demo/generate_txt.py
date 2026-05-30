@@ -7,8 +7,8 @@ spatio_ids = [13, 43, 48, 50, 68, 75, 79, 87, 90, 100, 107, 113, 114, 132, 137, 
 with open(r'd:\Document\MMDS\BTL-MMDS\code\demo\demo\valid_locations.txt', 'w', encoding='utf-8') as f:
     f.write('DANH SÁCH LOCATION HỢP LỆ CHO TỪNG MÔ HÌNH\n')
     f.write('='*50 + '\n\n')
-    f.write('1. Mô hình KShape Ensemble:\n')
-    f.write('- Khả dụng: Tất cả 265 locations.\n\n')
+    f.write('1. Mô hình KShape Ensemble và GBT Model:\n')
+    f.write('- Khả dụng: Hầu hết tất cả các locations (263 - 265 locations).\n\n')
     f.write('2. Mô hình Spatiotemporal Bundle và Holt-Winters:\n')
     f.write('- Khả dụng: 46 locations (Đây là danh sách các vùng có lưu lượng xe taxi cao nhất, các vùng nhỏ lẻ đã bị filter trong quá trình tiền xử lý).\n')
     f.write('- Chi tiết các locations:\n')

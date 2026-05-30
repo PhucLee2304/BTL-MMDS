@@ -1,8 +1,8 @@
 DANH SÁCH LOCATION HỢP LỆ CHO TỪNG MÔ HÌNH
 ==================================================
 
-1. Mô hình KShape Ensemble:
-- Khả dụng: Tất cả 265 locations.
+1. Mô hình KShape Ensemble và GBT Model:
+- Khả dụng: Hầu hết tất cả các locations (263 - 265 locations).
 
 2. Mô hình Spatiotemporal Bundle và Holt-Winters:
 - Khả dụng: 46 locations (Đây là danh sách các vùng có lưu lượng xe taxi cao nhất, các vùng nhỏ lẻ đã bị filter trong quá trình tiền xử lý).

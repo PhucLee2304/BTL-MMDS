@@ -18,7 +18,7 @@ zone_dict = {row['LocationID']: row['Zone'] for _, row in zones_df.iterrows()}
 valid_46_zones = [13, 43, 48, 50, 68, 75, 79, 87, 90, 100, 107, 113, 114, 132, 137, 138, 140, 141, 142, 143, 144, 148, 151, 158, 161, 162, 163, 164, 166, 170, 186, 211, 229, 230, 231, 233, 234, 236, 237, 238, 239, 246, 249, 262, 263, 264]
 
 def process_prediction(date_str, hour_str, minute_str, model_name):
-    if model_name == "KShape Ensemble":
+    if model_name in ["KShape Ensemble", "GBT Model"]:
         target_zones = list(zone_dict.keys())
     else:
         target_zones = valid_46_zones
@@ -110,10 +110,11 @@ input, .gr-dropdown, .gr-box {
 model_choices = [
     "KShape Ensemble",
     "Holt-Winters (XGBoost)",
-    "Spatiotemporal Bundle"
+    "Spatiotemporal Bundle",
+    "GBT Model"
 ]
 
-with gr.Blocks(css=custom_css, theme=gr.themes.Base()) as demo:
+with gr.Blocks() as demo:
     with gr.Column(elem_classes="glass-panel"):
         gr.Markdown("<h1 style='text-align: center; font-size: 2.5em;'>🚖 NY Taxi Demand AI</h1>")
         gr.Markdown("<h3 style='text-align: center; color: #94a3b8;'>Local Prediction & Demonstration System</h3>")
@@ -140,4 +141,4 @@ with gr.Blocks(css=custom_css, theme=gr.themes.Base()) as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", server_port=7860, share=False)
+    demo.launch(server_name="127.0.0.1", server_port=7860, share=False, css=custom_css, theme=gr.themes.Base())
