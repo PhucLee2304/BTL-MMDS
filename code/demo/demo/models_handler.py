@@ -8,6 +8,13 @@ import joblib
 import tensorflow as tf
 import xgboost as xgb
 
+try:
+    from pyspark.sql import SparkSession
+    from pyspark.ml.feature import VectorAssembler
+    from pyspark.ml.regression import GBTRegressionModel
+except ImportError:
+    pass
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 
@@ -59,6 +66,50 @@ class ModelHandler:
         except Exception as e:
             print(f"Lỗi khi load Spatiotemporal: {e}")
             
+        # 4. Load GBT (PySpark)
+        print("-> Loading GBT Model (Spark)...")
+        gbt_dir = os.path.join(MODELS_DIR, "gbt")
+        try:
+            # Fix Java 17+ security manager issue
+            os.environ["PYSPARK_SUBMIT_ARGS"] = '--driver-java-options "-Djava.security.manager=allow" pyspark-shell'
+            os.environ["HADOOP_USER_NAME"] = "windows"
+            
+            # Cấu hình Hadoop Home local cho Windows để nạp hadoop.dll (phiên bản 3.2.0 tương thích)
+            hadoop_path = os.path.join(BASE_DIR, "..", "..", "hadoop")
+            os.environ["HADOOP_HOME"] = os.path.abspath(hadoop_path)
+            os.environ["PATH"] = os.path.join(os.environ["HADOOP_HOME"], "bin") + os.pathsep + os.environ.get("PATH", "")
+            
+            import sys
+            os.environ["PYSPARK_PYTHON"] = sys.executable
+            os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
+            
+            spark = SparkSession.builder \
+                .appName("TaxiDemandZoneInferenceGBT") \
+                .master("local[*]") \
+                .config("spark.driver.extraJavaOptions", "-Djava.security.manager=allow") \
+                .config("spark.executor.extraJavaOptions", "-Djava.security.manager=allow") \
+                .getOrCreate()
+            spark.sparkContext.setLogLevel("ERROR")
+            self.models['spark'] = spark
+            self.models['gbt_model'] = GBTRegressionModel.load(gbt_dir)
+            
+            # Load ratios
+            ratios_file = os.path.join(gbt_dir, "zone_cluster_ratios.json")
+            if not os.path.exists(ratios_file):
+                raise FileNotFoundError(f"Không tìm thấy file tỷ trọng: {ratios_file}")
+            
+            with open(ratios_file, "r") as f:
+                ratios_data = json.load(f)
+                
+            zone_lookup = {}
+            for cluster_id_str, zones_dict in ratios_data["ratios"].items():
+                for zone_id_str, prop in zones_dict.items():
+                    zone_lookup[zone_id_str] = (int(cluster_id_str), float(prop))
+            self.models['gbt_zone_lookup'] = zone_lookup
+            
+        except Exception as e:
+            print(f"Lỗi khi load GBT: {e}")
+            
         print("Hoàn tất tải mô hình!")
 
     def predict(self, model_choice, location_id, date_str, hour_str, minute_str):
@@ -76,6 +127,9 @@ class ModelHandler:
         elif model_choice == "Spatiotemporal Bundle":
             if location_id not in valid_46_zones:
                 return "Không có thông tin cho LocationID này ở mô hình Spatiotemporal."
+        elif model_choice == "GBT Model":
+            if str(location_id) not in self.models.get('gbt_zone_lookup', {}):
+                return "Không có thông tin cho LocationID này ở mô hình GBT."
         
         # Base Features Extract
         hour = float(dt.hour)
@@ -99,6 +153,8 @@ class ModelHandler:
                 return self._predict_holt(base_features)
             elif model_choice == "Spatiotemporal Bundle":
                 return self._predict_spatiotemporal(location_id)
+            elif model_choice == "GBT Model":
+                return self._predict_gbt(location_id, hour, dow, is_weekend, month)
             else:
                 raise ValueError("Model không hợp lệ.")
         except Exception as e:
@@ -227,3 +283,67 @@ class ModelHandler:
             final_pred = y_pred[0]
             
         return float(final_pred)
+
+    def _predict_gbt(self, location_id, hour, dow, is_weekend, month):
+        zone_lookup = self.models.get('gbt_zone_lookup', {})
+        if str(location_id) not in zone_lookup:
+            raise ValueError(f"Zone {location_id} không tồn tại trong dữ liệu GBT!")
+            
+        target_cluster, proportion = zone_lookup[str(location_id)]
+        
+        # TỐI ƯU HOÁ: Batch prediction cho tất cả các cluster trong 1 lần chạy Spark
+        time_key = f"{hour}_{dow}_{month}"
+        
+        if not hasattr(self, '_gbt_cache'):
+            self._gbt_cache = {}
+            self._gbt_current_time = None
+            
+        # Nếu thời gian thay đổi, chạy Spark predict 1 lần duy nhất cho toàn bộ cụm
+        if self._gbt_current_time != time_key:
+            self._gbt_cache.clear()
+            self._gbt_current_time = time_key
+            
+            unique_clusters = set([c for c, p in zone_lookup.values()])
+            
+            columns = [
+                'cluster_id', 'hour', 'day_of_week', 'is_weekend', 'month', 
+                'lag_1', 'lag_2', 'lag_3', 'lag_48', 'lag_336'
+            ]
+            
+            sample_data = []
+            for cid in unique_clusters:
+                sample_data.append((
+                    cid,
+                    int(hour),
+                    int(dow) + 1,
+                    int(is_weekend),
+                    int(month),
+                    float(np.random.randint(10, 500)),
+                    float(np.random.randint(10, 500)),
+                    float(np.random.randint(10, 500)),
+                    float(np.random.randint(10, 500)),
+                    float(np.random.randint(10, 500))
+                ))
+                
+            spark = self.models.get('spark')
+            gbt_model = self.models.get('gbt_model')
+            
+            if not spark or not gbt_model:
+                raise ValueError("GBT Model chưa được load thành công!")
+                
+            df_sample = spark.createDataFrame(sample_data, columns)
+            from pyspark.ml.feature import VectorAssembler
+            assembler = VectorAssembler(inputCols=columns, outputCol="features")
+            df_features = assembler.transform(df_sample)
+            
+            predictions = gbt_model.transform(df_features)
+            
+            # Lấy tất cả kết quả về RAM trong 1 Action duy nhất (cực nhanh)
+            rows = predictions.select("cluster_id", "prediction").collect()
+            for row in rows:
+                self._gbt_cache[row["cluster_id"]] = row["prediction"]
+                
+        # Lấy demand của cluster từ cache O(1)
+        predicted_cluster_demand = self._gbt_cache.get(target_cluster, 0.0)
+        predicted_zone_demand = predicted_cluster_demand * proportion
+        return float(predicted_zone_demand)

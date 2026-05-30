@@ -46,10 +46,6 @@ class Preprocess:
             .config("spark.sql.parquet.mergeSchema", "false")
             .config("spark.sql.adaptive.enabled", "true")
             .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-            # Tắt vectorized reader để tránh lỗi thầm lặng khi kiểu cột trong parquet
-            # (ví dụ IntegerType) không khớp chính xác với schema được ép buộc (LongType).
-            # Nếu bật vectorized reader, Spark có thể trả về toàn NULL cho cả cột
-            # và làm hỏng cả push-down filter mà không báo lỗi rõ ràng.
             .config("spark.sql.parquet.enableVectorizedReader", "false")
             .config("spark.master", "yarn")
             .config("spark.submit.deployMode", "client")
@@ -64,9 +60,6 @@ class Preprocess:
         )
         self.spark.sparkContext.setLogLevel("ERROR")
 
-        # Schema chỉ còn dùng để tạo DataFrame rỗng khi read thất bại.
-        # Không dùng để ép kiểu lúc đọc parquet nữa — việc cast được thực hiện
-        # tường minh trong select() để tránh lỗi thầm lặng của vectorized reader.
         self.schema = StructType([
             StructField("tpep_pickup_datetime", TimestampType(), True),
             StructField("tpep_dropoff_datetime", TimestampType(), True),
@@ -81,8 +74,6 @@ class Preprocess:
     def read_and_clean_split(self, path: str, split_name: str):
         c = self.c
         try:
-            # Không dùng .schema() khi đọc để Spark tự suy ra kiểu gốc trong parquet.
-            # Việc ép kiểu về đúng type được thực hiện tường minh ở select() bên dưới.
             df = self.spark.read.option("mergeSchema", "false").parquet(path)
         except Exception as e:
             print(f"Warning: Could not read parquet from {path}. Error: {e}")
@@ -117,10 +108,6 @@ class Preprocess:
         val_df   = self.read_and_clean_split(self.c.input_val,   "validation")
         test_df  = self.read_and_clean_split(self.c.input_test,  "test")
 
-        # ─── CHẶN FUTURE LEAK: cắt cứng khoảng thời gian hợp lệ của từng tập ───
-        # Train : 01/2020 → hết tháng 02/2024  (< 2024-03-01)
-        # Val   : 03/2024 → hết tháng 09/2024  (>= 2024-03-01 và < 2024-10-01)
-        # Test  : 10/2024 → hết tháng 12/2025  (>= 2024-10-01 và < 2026-01-01)
         train_df = train_df.filter(
             (F.col("pickup_dt") >= F.lit("2020-01-01").cast("timestamp")) &
             (F.col("pickup_dt") <  F.lit("2024-03-01").cast("timestamp"))
@@ -134,7 +121,6 @@ class Preprocess:
             (F.col("pickup_dt") <  F.lit("2026-01-01").cast("timestamp"))
         )
 
-        # ─── DIAGNOSTIC: in count + min/max ts của từng tập sau khi filter ───
         for name, sdf in [("train", train_df), ("validation", val_df), ("test", test_df)]:
             stats = sdf.agg(
                 F.count("*").alias("cnt"),
@@ -201,8 +187,6 @@ class Preprocess:
         train_expr = F.expr(f"timestamp'{train_end_str}'")
         val_expr = F.expr(f"timestamp'{val_end_str}'")
 
-        # Tính số ngày phân biệt có dữ liệu trong tập train
-        # Dùng Day Coverage thay vì Bin Coverage để tránh mẫu số quá lớn (~70k bins)
         train_days_total = max(1, int((train_end_val - min_ts_val).total_seconds() / 86400))
 
         active = (
@@ -310,7 +294,6 @@ class Preprocess:
             panel, train_expr, val_expr, min_ts = self.build_panel(clean)
             panel = self.engineer(panel, train_expr, val_expr, min_ts)
 
-            # Output straight to HDFS/Cloud
             panel.write.mode("overwrite").partitionBy("dataset_split").parquet(self.c.output_path_base)
 
             print(f"Exported: {self.c.output_path_base}")
@@ -318,25 +301,21 @@ class Preprocess:
 
         finally:
             try:
-                # Dọn dẹp DataFrame (báo Spark giải phóng vùng nhớ đang bị chiếm dụng)
                 del clean, panel
             except Exception:
                 pass
             
             try:
-                # Clear bộ đệm Cache của Spark (những bảng được cache lại)
                 self.spark.catalog.clearCache()
             except Exception:
                 pass
                 
             try:
-                # Gọi thủ công Garbage Collector của Python để giải phóng RAM
                 gc.collect()
             except Exception:
                 pass
                 
             try:
-                # Ép tắt phiên Spark, thao tác này sẽ kill mọi tiến trình / job đang chạy ngầm trên YARN Cluster
                 self.spark.stop()
                 print("[INFO] Spark stopped and resources released.")
             except Exception as e:
@@ -346,6 +325,5 @@ cfg = Config()
 job = Preprocess(cfg)
 job.run()
 
-# Dọn dẹp lần cuối các biến cục bộ ngoài class
 del job
 gc.collect()
