@@ -214,3 +214,5 @@ code/kshape/clustering
 code/kshape/model
 code/kshape/preclustering
 jupyter_log.txt
+code/kshape/report
+code/demo/models

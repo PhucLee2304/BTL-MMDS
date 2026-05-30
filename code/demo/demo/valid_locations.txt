@@ -1,0 +1,55 @@
+DANH SÁCH LOCATION HỢP LỆ CHO TỪNG MÔ HÌNH
+==================================================
+
+1. Mô hình KShape Ensemble:
+- Khả dụng: Tất cả 265 locations.
+
+2. Mô hình Spatiotemporal Bundle và Holt-Winters:
+- Khả dụng: 46 locations (Đây là danh sách các vùng có lưu lượng xe taxi cao nhất, các vùng nhỏ lẻ đã bị filter trong quá trình tiền xử lý).
+- Chi tiết các locations:
+  + ID 13: Battery Park City
+  + ID 43: Central Park
+  + ID 48: Clinton East
+  + ID 50: Clinton West
+  + ID 68: East Chelsea
+  + ID 75: East Harlem South
+  + ID 79: East Village
+  + ID 87: Financial District North
+  + ID 90: Flatiron
+  + ID 100: Garment District
+  + ID 107: Gramercy
+  + ID 113: Greenwich Village North
+  + ID 114: Greenwich Village South
+  + ID 132: JFK Airport
+  + ID 137: Kips Bay
+  + ID 138: LaGuardia Airport
+  + ID 140: Lenox Hill East
+  + ID 141: Lenox Hill West
+  + ID 142: Lincoln Square East
+  + ID 143: Lincoln Square West
+  + ID 144: Little Italy/NoLiTa
+  + ID 148: Lower East Side
+  + ID 151: Manhattan Valley
+  + ID 158: Meatpacking/West Village West
+  + ID 161: Midtown Center
+  + ID 162: Midtown East
+  + ID 163: Midtown North
+  + ID 164: Midtown South
+  + ID 166: Morningside Heights
+  + ID 170: Murray Hill
+  + ID 186: Penn Station/Madison Sq West
+  + ID 211: SoHo
+  + ID 229: Sutton Place/Turtle Bay North
+  + ID 230: Times Sq/Theatre District
+  + ID 231: TriBeCa/Civic Center
+  + ID 233: UN/Turtle Bay South
+  + ID 234: Union Sq
+  + ID 236: Upper East Side North
+  + ID 237: Upper East Side South
+  + ID 238: Upper West Side North
+  + ID 239: Upper West Side South
+  + ID 246: West Chelsea/Hudson Yards
+  + ID 249: West Village
+  + ID 262: Yorkville East
+  + ID 263: Yorkville West
+  + ID 264: nan
