@@ -21,8 +21,12 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from xgboost.spark import SparkXGBRegressor
 from pyspark.ml.functions import vector_to_array
+import os
+import subprocess
+import tempfile
+import tensorflow_io as tfio
+from spark_tensorflow_distributor import MirroredStrategyRunner
 
-# ─── Utilities ─────────────────────────────────────────────────────────────────
 def stage(name: str):
     print(f"\n{'=' * 80}\n{name}\n{'=' * 80}")
 
@@ -75,7 +79,6 @@ def compute_metrics(df: DataFrame, pred_col: str, y_col: str) -> Dict[str, float
                 / (F.abs(F.col(y_col)) + F.abs(F.col(pred_col)) + F.lit(1e-6))
             ) * 100
         ).alias("sMAPE"),
-        # R2 = 1 - SS_res / SS_tot
         F.avg(F.pow(F.col(y_col) - F.col(pred_col), 2)).alias("ss_res_mean"),
         F.variance(F.col(y_col)).alias("var_y"),
     ).first()
@@ -93,8 +96,6 @@ def compute_metrics(df: DataFrame, pred_col: str, y_col: str) -> Dict[str, float
     }
 
 def copy_dir_to_hdfs(spark: SparkSession, local_dir: str, hdfs_dir: str):
-    """Upload local directory to HDFS."""
-    import os
     jvm = spark._jvm
     fs = jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
     dst = jvm.org.apache.hadoop.fs.Path(hdfs_dir)
@@ -109,7 +110,6 @@ def copy_dir_to_hdfs(spark: SparkSession, local_dir: str, hdfs_dir: str):
                 jvm.org.apache.hadoop.fs.Path(f"{hdfs_dir.rstrip('/')}/{name}"),
             )
 
-# ─── Config ────────────────────────────────────────────────────────────────────
 @dataclass
 class Config:
     hdfs_work_dir: str = "/user/kshape/model"
@@ -117,7 +117,7 @@ class Config:
 
     time_col: str = "pickup_bin_30m"
     loc_col: str = "PULocationID"
-    target_col: str = "target_t1"  # target = demand at t+1
+    target_col: str = "target_t1"
     split_col: str = "dataset_split"
     time_key_col: str = "time_key"
 
@@ -138,11 +138,11 @@ class Config:
 
     # XGBoost
     xgb_num_workers: int = 3
-    xgb_n_estimators: int = 10
+    xgb_n_estimators: int = 10 # num_trees
     xgb_max_depth: int = 5
     xgb_learning_rate: float = 0.03
-    xgb_subsample: float = 0.85
-    xgb_colsample_bytree: float = 0.85
+    xgb_subsample: float = 0.85 # fraction of rows to sample for each tree
+    xgb_colsample_bytree: float = 0.85 # fraction of columns to sample for each tree
 
     pred_rows_per_file: int = 200_000
 
@@ -157,7 +157,6 @@ class Config:
     def spark_cp(self) -> str:
         return self.tfrecord_jar
 
-# ─── Scaler ────────────────────────────────────────────────────────────────────
 @dataclass
 class SequenceScalerStats:
     seq_mean: np.ndarray
@@ -167,7 +166,6 @@ class SequenceScalerStats:
 
     @classmethod
     def from_hdfs(cls, spark: SparkSession, path: str) -> "SequenceScalerStats":
-        """Read scaler stats from parquet on HDFS (written by premodel.py)."""
         row = spark.read.parquet(path).first()
         return cls(
             np.asarray(ast.literal_eval(row["seq_mean"]), dtype=np.float32),
@@ -176,9 +174,7 @@ class SequenceScalerStats:
             float(row["y_denom"]),
         )
 
-# ─── SparkSession ──────────────────────────────────────────────────────────────
 def build_spark(c: Config) -> SparkSession:
-    import os
     stage("SPARK RUNTIME")
     abs_tfr = os.path.abspath(c.tfrecord_jar)
     spark_jars = f"{abs_tfr}"
@@ -208,7 +204,6 @@ def build_spark(c: Config) -> SparkSession:
         .getOrCreate()
     )
 
-# ─── 1. XGBoost Trainer ───────────────────────────────────────────────────────
 class XGBoostTrainer:
     def __init__(self, spark: SparkSession, c: Config):
         self.spark = spark
@@ -239,11 +234,9 @@ class XGBoostTrainer:
                 missing=0.0,
             ).fit(train)
 
-            # Export XGBoost model to HDFS (needed for demo inference)
             self.model.write().overwrite().save(self.c.hdfs("models", "spark_xgb_model"))
             print(f"XGBoost model saved to: {self.c.hdfs('models', 'spark_xgb_model')}")
 
-            # Predict on all splits
             for split in self.c.valid_splits:
                 part = full.filter(F.col(self.c.split_col) == split)
                 pred = (
@@ -263,7 +256,6 @@ class XGBoostTrainer:
             self.model = None
             cleanup(self.spark, full, train, part, pred)
 
-# ─── 2. CNN-LSTM Trainer ──────────────────────────────────────────────────────
 class CNNLSTMTrainer:
     def __init__(self, spark: SparkSession, c: Config, scaler: SequenceScalerStats):
         self.spark = spark
@@ -273,10 +265,7 @@ class CNNLSTMTrainer:
 
     def run(self):
         stage("2/3 — TRAIN CNN-LSTM (DISTRIBUTED)")
-        from spark_tensorflow_distributor import MirroredStrategyRunner
-        import os
 
-        # Dọn dẹp model cũ trước khi training để tránh nhầm lẫn
         self._cleanup_before_training()
 
         c = self.c
@@ -286,15 +275,6 @@ class CNNLSTMTrainer:
         local_model_dir = "/tmp/cnn_model_export"
 
         def train_fn():
-            import os
-            import shutil
-            import tensorflow as tf
-            import subprocess
-            try:
-                import tensorflow_io as tfio
-            except ImportError:
-                print("WARNING: tensorflow_io not found. HDFS reading may fail.")
-
             strategy = tf.distribute.MultiWorkerMirroredStrategy()
             
             options = tf.data.Options()
@@ -323,7 +303,6 @@ class CNNLSTMTrainer:
                 hdfs_dir = c.hdfs('prepared', 'tfrecords', split)
                 local_dir = f"/tmp/tfrecords_cache_{split}"
                 
-                # Copy from HDFS to local to avoid TF HDFS UnimplementedError
                 if not os.path.exists(local_dir) or not glob.glob(f"{local_dir}/part-*"):
                     os.makedirs(local_dir, exist_ok=True)
                     cmd = f"hdfs dfs -get {hdfs_dir}/part-* {local_dir}/ 2>/dev/null || hadoop fs -get {hdfs_dir}/part-* {local_dir}/ 2>/dev/null || $HADOOP_HOME/bin/hdfs dfs -get {hdfs_dir}/part-* {local_dir}/"
@@ -338,12 +317,22 @@ class CNNLSTMTrainer:
                 return ds.batch(c.batch_size).prefetch(tf.data.AUTOTUNE)
 
             with strategy.scope():
+                # Shape: (batch_size, sequence_length, num_features)
                 inp = tf.keras.layers.Input((c.seq_window, n_features))
+
+                # Conv1D: (batch_size, sequence_length, num_features) -> (batch_size, sequence_length, 64)
+                # window size = 3
+                # padding = causal: output[t] depends on input[t-1], input[t-2], input[t-3]
                 x = tf.keras.layers.Conv1D(64, 3, padding="causal", activation="relu")(inp)
                 x = tf.keras.layers.BatchNormalization()(x)
                 x = tf.keras.layers.Dropout(0.20)(x)
+
+                # LSTM: (batch_size, sequence_length, 64) -> (batch_size, 64)
                 x = tf.keras.layers.LSTM(64)(x)
+
+                # Dense: (batch_size, 64) -> (batch_size, 32)
                 x = tf.keras.layers.Dense(32, activation="relu")(x)
+                # Output: (batch_size, 32) -> pickup_demand at t+1
                 out = tf.keras.layers.Dense(1, activation="linear")(x)
                 model = tf.keras.Model(inp, out)
                 model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss="mae", metrics=["mae"])
@@ -351,7 +340,6 @@ class CNNLSTMTrainer:
                 train_ds = get_dataset("train", shuffle=True)
                 val_ds = get_dataset("validation", shuffle=False)
 
-                # Custom training loop to bypass Keras 3 model.fit() incompatibility with tf.distribute
                 loss_fn = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.NONE)
                 optimizer = tf.keras.optimizers.Adam(1e-3)
 
@@ -421,7 +409,6 @@ class CNNLSTMTrainer:
                 if best_weights is not None:
                     model.set_weights(best_weights)
 
-            # Xác định chief worker qua TF_CONFIG JSON (chỉ worker index 0 mới lưu model)
             import json as _json
             _tf_config_str = os.environ.get('TF_CONFIG', '{}')
             try:
@@ -429,7 +416,7 @@ class CNNLSTMTrainer:
                 _task_index = int(_tf_config.get('task', {}).get('index', 0))
                 is_chief = (_task_index == 0)
             except Exception:
-                is_chief = True  # Không có TF_CONFIG → chạy local → coi là chief
+                is_chief = True  
 
             if is_chief:
                 shutil.rmtree(local_model_dir, ignore_errors=True)
@@ -455,7 +442,6 @@ class CNNLSTMTrainer:
             use_custom_strategy=True
         ).run(train_fn)
 
-        # Tự động kiểm tra và khôi phục cnn_lstm.keras lên HDFS nếu bị thiếu
         self._ensure_model_on_hdfs()
 
         print("Starting distributed inference for CNN-LSTM...")
@@ -463,21 +449,11 @@ class CNNLSTMTrainer:
             self._predict(split)
 
     def _cleanup_before_training(self):
-        """
-        Dọn dẹp trước khi training để tránh nhầm lẫn model cũ/mới:
-        - Xóa cnn_lstm.keras cũ trên HDFS
-        - Xóa /tmp/cnn_model_export/ trên tất cả worker
-        - Xóa cache TFRecord /tmp/tfrecords_cache_* trên tất cả worker
-          (tránh DataLossError do file bị truncated/corrupted từ lần chạy trước)
-        - Xóa cache inference cnn_lstm_inf_*.keras cũ trên tất cả worker
-        """
-        import subprocess
         hdfs_dst = self.c.hdfs("models", "cnn_lstm.keras")
         workers = ["hadoop-worker-1", "hadoop-worker-2", "hadoop-worker-3"]
 
         print("[CLEANUP] Dọn dẹp model cũ trước khi training...")
 
-        # 1. Xóa model cũ trên HDFS
         r = subprocess.run(f"hdfs dfs -rm -f {hdfs_dst}", shell=True,
                            capture_output=True)
         if r.returncode == 0:
@@ -485,11 +461,10 @@ class CNNLSTMTrainer:
         else:
             print(f"  [HDFS] Không có file cũ hoặc xóa thất bại (bỏ qua).")
 
-        # 2. Xóa model export, TFRecord cache và inference cache trên từng worker
         for worker in workers:
             clean_cmd = (
                 "rm -rf /tmp/cnn_model_export "
-                "&& rm -rf /tmp/tfrecords_cache_* "   # ← tránh DataLossError
+                "&& rm -rf /tmp/tfrecords_cache_* "
                 "&& rm -f /tmp/cnn_lstm_inf_*.keras"
             )
             r = subprocess.run(f"ssh {worker} '{clean_cmd}'", shell=True,
@@ -500,18 +475,10 @@ class CNNLSTMTrainer:
         print("[CLEANUP] Hoàn tất. Bắt đầu training mới...")
 
     def _ensure_model_on_hdfs(self):
-        """
-        Đảm bảo cnn_lstm.keras mới nhất đã được upload lên HDFS.
-        Vì _cleanup_before_training() đã xóa model cũ trước khi training,
-        nếu file vẫn chưa có trên HDFS → lỗi upload trong train_fn
-        → tự động tìm và upload từ worker.
-        """
-        import subprocess
         hdfs_dst = self.c.hdfs("models", "cnn_lstm.keras")
         local_file = "/tmp/cnn_model_export/cnn_lstm.keras"
         workers = ["hadoop-worker-1", "hadoop-worker-2", "hadoop-worker-3"]
 
-        # Kiểm tra file đã tồn tại trên HDFS chưa (do chief upload trong train_fn)
         check = subprocess.run(
             f"hdfs dfs -test -e {hdfs_dst}", shell=True
         )
@@ -546,7 +513,6 @@ class CNNLSTMTrainer:
         )
 
     def _predict(self, split: str):
-        """Distributed predict using PySpark mapInPandas."""
         mean = self.scaler.seq_mean
         std = self.scaler.seq_std
         y_min = self.scaler.y_min
@@ -557,13 +523,6 @@ class CNNLSTMTrainer:
         c = self.c
 
         def predict_batch(iterator):
-            import tensorflow as tf
-            import numpy as np
-            import tempfile
-            import os
-            import subprocess
-            import pandas as pd
-
             tmp_dir = tempfile.gettempdir()
             local_model_path = os.path.join(tmp_dir, f"cnn_lstm_inf_{os.getpid()}.keras")
             
@@ -600,8 +559,7 @@ class CNNLSTMTrainer:
         pred.write.mode("overwrite").parquet(self.c.hdfs("predictions", "cnn_lstm", split))
         print(f"  CNN-LSTM predictions [{split}] exported via distributed inference.")
 
-
-# ─── 3. Ridge Ensemble ────────────────────────────────────────────────────────
+# y = w1 * xgb_pred + w2 * cnn_lstm_pred + b
 class EnsembleTrainer:
     def __init__(self, spark: SparkSession, c: Config):
         self.spark = spark
@@ -617,7 +575,6 @@ class EnsembleTrainer:
         all_metrics = {}
         val_base = val_vec = base = vec = pred = None
         try:
-            # Fit Ridge on validation set
             val_base = self._merge_predictions("validation")
             val_vec = self.assembler.transform(val_base)
             self.model = LinearRegression(
@@ -629,7 +586,6 @@ class EnsembleTrainer:
             self.model.write().overwrite().save(self.c.hdfs("models", "spark_ridge_meta_model"))
             print(f"Ridge model saved to: {self.c.hdfs('models', 'spark_ridge_meta_model')}")
 
-            # Evaluate on each split
             for split in self.c.valid_splits:
                 base = self._merge_predictions(split)
                 vec = self.assembler.transform(base)
@@ -663,7 +619,6 @@ class EnsembleTrainer:
             cleanup(self.spark, val_base, val_vec, base, vec, pred)
 
     def _merge_predictions(self, split: str) -> DataFrame:
-        """Join XGBoost + CNN-LSTM predictions for the same split."""
         xgb_df = self.spark.read.parquet(
             self.c.hdfs("predictions", "xgb", split)
         ).alias("xgb")
@@ -687,9 +642,7 @@ class EnsembleTrainer:
             )
         )
 
-# ─── 4. Save metrics & metadata to HDFS ──────────────────────────────────────
 def save_metrics_to_hdfs(spark: SparkSession, all_metrics: Dict, c: Config):
-    """Convert metrics dict to DataFrame and write to HDFS."""
     rows = []
     for key, m in all_metrics.items():
         parts = key.split("_", 1)
@@ -708,8 +661,6 @@ def save_metrics_to_hdfs(spark: SparkSession, all_metrics: Dict, c: Config):
     print(f"\nMetrics table saved to: {c.hdfs('metrics')}")
 
 def save_metadata_to_hdfs(spark: SparkSession, c: Config, scaler: SequenceScalerStats, all_metrics: Dict):
-    """Export pipeline config, scaler stats, and metrics to a JSON for demo use."""
-    import json, os, shutil
     local_meta_dir = "/tmp/metadata_export"
     shutil.rmtree(local_meta_dir, ignore_errors=True)
     os.makedirs(local_meta_dir, exist_ok=True)
@@ -748,25 +699,7 @@ def save_metadata_to_hdfs(spark: SparkSession, c: Config, scaler: SequenceScaler
     print(f"Pipeline metadata saved to: {c.hdfs('models', 'pipeline_metadata.json')}")
 
 def export_feature_lookup(spark: SparkSession, c: Config):
-    """
-    Export feature lookup table for demo inference.
-
-    The demo cannot recompute historical lag/rolling/cluster features on the fly
-    for a single raw trip. Instead, for any (PULocationID, pickup_bin_30m) key
-    in the test set, this lookup table provides:
-      - All 18 tabular features needed by XGBoost
-      - The 48-step sequence (flattened) needed by CNN-LSTM
-
-    Demo flow:
-        (PULocationID, pickup_datetime)
-            -> round to pickup_bin_30m
-            -> lookup tabular features   -> XGBoost  -> xgb_pred
-            -> lookup sequence_flat      -> CNN-LSTM  -> cnn_lstm_pred
-            -> Ridge Ensemble            -> pickup_demand
-    """
     stage("EXPORT FEATURE LOOKUP TABLE FOR DEMO")
-
-    # ── Tabular feature lookup: key = (PULocationID, pickup_bin_30m) ──────────
     tabular_features = [
         "hour", "minute", "day_of_week", "is_weekday", "is_weekend",
         "slot_in_week", "demand_t_1", "rolling_mean_24h", "ewma_output",
@@ -776,7 +709,6 @@ def export_feature_lookup(spark: SparkSession, c: Config):
         "intra_cluster_similarity", "inter_cluster_similarity",
     ]
     tab = spark.read.parquet(c.hdfs("prepared", "tabular"))
-    # Reconstruct individual feature columns from features_vector using vector_to_array
     tab = tab.withColumn("features_array", vector_to_array("features_vector"))
     for i, feat in enumerate(tabular_features):
         tab = tab.withColumn(feat, F.col("features_array")[i])
@@ -797,7 +729,6 @@ def export_feature_lookup(spark: SparkSession, c: Config):
     print(f"Feature lookup (tabular) exported to: {c.hdfs('demo', 'feature_lookup')}")
     cleanup(spark, tab, feat_lookup)
 
-    # ── Sequence lookup: key = (PULocationID, pickup_bin_30m) ─────────────────
     seq = spark.read.parquet(c.hdfs("prepared", "sequence"))
     seq_lookup = (
         seq
@@ -814,7 +745,6 @@ def export_feature_lookup(spark: SparkSession, c: Config):
     print(f"Sequence lookup (CNN-LSTM input) exported to: {c.hdfs('demo', 'sequence_lookup')}")
     cleanup(spark, seq, seq_lookup)
 
-# ─── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     c = Config()
     seed_all(c.random_state)
@@ -822,23 +752,12 @@ if __name__ == "__main__":
     spark.sparkContext.setLogLevel("WARN")
 
     try:
-        # Read scaler from HDFS (written by premodel.py)
         scaler = SequenceScalerStats.from_hdfs(spark, c.hdfs("prepared", "scaler_stats"))
-
-        # 1. XGBoost
         XGBoostTrainer(spark, c).run()
-
-        # 2. CNN-LSTM
         CNNLSTMTrainer(spark, c, scaler).run()
-
-        # 3. Ridge Ensemble + Metrics
         all_metrics = EnsembleTrainer(spark, c).run()
-
-        # 4. Save metrics & metadata to HDFS
         save_metrics_to_hdfs(spark, all_metrics, c)
         save_metadata_to_hdfs(spark, c, scaler, all_metrics)
-
-        # 5. Export feature lookup table for demo (test split snapshot)
         export_feature_lookup(spark, c)
 
         print("\n" + "=" * 80)

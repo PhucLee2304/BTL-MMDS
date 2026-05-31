@@ -18,8 +18,8 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 from pyspark.storagelevel import StorageLevel
+import os
 
-# ─── Tiện ích ──────────────────────────────────────────────────────────────────
 def stage(name: str):
     print(f"\n{'=' * 80}\n{name}\n{'=' * 80}")
 
@@ -49,23 +49,18 @@ def cleanup(spark: SparkSession | None = None, *objs: object):
             pass
     gc.collect()
 
-# ─── Config ────────────────────────────────────────────────────────────────────
 @dataclass
 class Config:
     input_path: str = "/user/kshape/feature_engineering"
     hdfs_work_dir: str = "/user/kshape/model"
-    # Spark TFRecord JAR (phải có sẵn trên cluster)
     tfrecord_jar: str = "./lib/spark-tfrecord_2.12-0.7.0.jar"
 
     time_col: str = "pickup_bin_30m"
     loc_col: str = "PULocationID"
     target_col: str = "pickup_demand"
-    # Target thực sự là demand tại t+1 → tạo cột "target_t1" trong pipeline
     target_t1_col: str = "target_t1"
     split_col: str = "dataset_split"
     time_key_col: str = "time_key"
-
-    # Feature cho XGBoost (tabular)
     tabular_features: tuple[str, ...] = (
         "hour", "minute", "day_of_week", "is_weekday", "is_weekend",
         "slot_in_week",
@@ -76,14 +71,13 @@ class Config:
         "cluster_diff_t1", "cluster_mean_diff_24h",
         "intra_cluster_similarity", "inter_cluster_similarity",
     )
-    # Feature cho CNN-LSTM (chuỗi thời gian)
     sequence_features: tuple[str, ...] = (
         "pickup_demand", "ewma_output", "rolling_mean_24h", "day_of_week",
     )
 
     split_aliases_to_validation: tuple[str, ...] = ("val", "valid", "validation")
     valid_splits: tuple[str, ...] = ("train", "validation", "test")
-    seq_window: int = 48       # 48 bins = 24h lookback
+    seq_window: int = 48
     xgb_num_workers: int = 2
     random_state: int = 42
 
@@ -98,7 +92,6 @@ class Config:
     def spark_cp(self) -> str:
         return self.tfrecord_jar
 
-# ─── Scaler stats (lưu/đọc qua Spark HDFS) ────────────────────────────────────
 @dataclass
 class SequenceScalerStats:
     seq_mean: np.ndarray
@@ -107,7 +100,6 @@ class SequenceScalerStats:
     y_denom: float
 
     def to_list(self):
-        """Serialize thành list để ghi ra parquet trên HDFS."""
         return {
             "seq_mean": self.seq_mean.tolist(),
             "seq_std":  self.seq_std.tolist(),
@@ -115,9 +107,7 @@ class SequenceScalerStats:
             "y_denom":  float(self.y_denom),
         }
 
-# ─── SparkSession ──────────────────────────────────────────────────────────────
 def build_spark(c: Config) -> SparkSession:
-    import os
     stage("SPARK RUNTIME")
     abs_tfr = os.path.abspath(c.tfrecord_jar)
     spark_jars = f"{abs_tfr}"
@@ -147,7 +137,6 @@ def build_spark(c: Config) -> SparkSession:
         .getOrCreate()
     )
 
-# ─── DataProcessor ─────────────────────────────────────────────────────────────
 class DataProcessor:
     def __init__(self, spark: SparkSession, c: Config):
         self.spark = spark
@@ -178,7 +167,6 @@ class DataProcessor:
             cleanup(self.spark, seq, clean, raw)
 
     def _validate(self, df: DataFrame):
-        """Kiểm tra tất cả cột bắt buộc có trong input."""
         need = {
             self.c.time_col, self.c.loc_col, self.c.target_col, self.c.split_col,
             *self.c.tabular_features, *self.c.sequence_features,
@@ -188,17 +176,15 @@ class DataProcessor:
             raise ValueError(f"Input parquet thiếu cột bắt buộc: {missing}")
 
     def _create_target_t1(self, df: DataFrame) -> DataFrame:
-        """Tạo cột target_t1 = pickup_demand tại t+1 cho mỗi zone."""
+        # Create target_t1 = pickup_demand at t+1 for each zone
         stage("CREATE TARGET T+1")
         w = Window.partitionBy(self.c.loc_col).orderBy(self.c.time_col)
         df = df.withColumn(self.c.target_t1_col, F.lead(self.c.target_col, 1).over(w))
-        # Bỏ hàng cuối cùng của mỗi zone (không có target t+1)
         df = df.filter(F.col(self.c.target_t1_col).isNotNull())
         print(f"Rows after creating target_t1: {df.count():,}")
         return df
 
     def _clean(self, df: DataFrame) -> DataFrame:
-        """Chọn cột, chuẩn hoá split, fill null, repartition."""
         cols = uniq([
             self.c.time_col, self.c.loc_col, self.c.target_col, self.c.target_t1_col,
             self.c.split_col, *self.c.tabular_features, *self.c.sequence_features,
@@ -221,13 +207,14 @@ class DataProcessor:
         )
 
     def _write_tabular(self, clean: DataFrame):
-        """Ghi dữ liệu tabular với VectorAssembler cho XGBoost."""
         stage("WRITE TABULAR PARQUET")
         tab = None
         try:
+            # Select features and target
             base = [self.c.time_col, self.c.time_key_col, self.c.loc_col, self.c.split_col, self.c.target_t1_col]
             feats = list(self.c.tabular_features)
             tab = clean.select(*(base + feats)).fillna(0.0, subset=feats)
+            # VectorAssembler: combine features into a vector column for XGBoost
             tab = (
                 VectorAssembler(inputCols=feats, outputCol="features_vector", handleInvalid="keep")
                 .transform(tab)
@@ -240,8 +227,8 @@ class DataProcessor:
         finally:
             cleanup(self.spark, tab)
 
+    # Transform features to 3D arrays (a sequence of T=48 steps, F=num_features) for each zone
     def _build_sequence(self, clean: DataFrame) -> DataFrame:
-        """Xây cửa sổ trượt 48 bước cho mỗi (zone, time)."""
         stage("BUILD SEQUENCE WINDOWS")
         cols = uniq([
             self.c.time_col, self.c.time_key_col, self.c.loc_col,
@@ -252,18 +239,25 @@ class DataProcessor:
             .orderBy(self.c.time_col)
             .rowsBetween(-self.c.seq_window + 1, 0)
         )
+        # Shape: [num_zones, seq_window]
         return (
             clean.select(*cols)
             .fillna(0.0, subset=list(self.c.sequence_features))
+            # Group sequence_features into a single array for each row (each time step)
+            # Shape: [num_zones, seq_window, num_features]
             .withColumn(
                 "_step",
                 F.array(*[F.col(x).cast("float") for x in self.c.sequence_features])
             )
+            # Create a pair of (timestamp, feature vector)
             .withColumn(
                 "_pair",
                 F.struct(F.col(self.c.time_col).alias("ts"), F.col("_step").alias("vals"))
             )
+            # Create a sliding window of 48 steps for each zone
             .withColumn("_window", F.collect_list("_pair").over(w))
+            # Remove timestamp, only keep feature vectors and sort by timestamp
+            # Shape: [48, num_features]
             .withColumn(
                 "sequence_array",
                 F.expr("transform(array_sort(_window), x -> x.vals)")
@@ -277,7 +271,6 @@ class DataProcessor:
         )
 
     def _compute_scaler(self, seq: DataFrame) -> SequenceScalerStats:
-        """Tính z-score stats từ tập train (cho chuẩn hoá sequence)."""
         n = len(self.c.sequence_features)
         train_steps = None
         try:
@@ -323,7 +316,6 @@ class DataProcessor:
             cleanup(self.spark, train_steps)
 
     def _write_sequence_parquet(self, seq: DataFrame):
-        """Ghi sequence dạng flatten ra parquet trên HDFS."""
         flat = None
         try:
             flat = (
@@ -341,7 +333,6 @@ class DataProcessor:
             cleanup(self.spark, flat)
 
     def _write_tfrecord(self, seq: DataFrame):
-        """Ghi TFRecord cho TensorFlow dataset."""
         stage("WRITE TFRECORD")
         tfdf = part = None
         try:
@@ -371,7 +362,6 @@ class DataProcessor:
             cleanup(self.spark, tfdf, part)
 
     def _save_scaler_hdfs(self, scaler: SequenceScalerStats):
-        """Lưu scaler stats ra HDFS dạng parquet (1 row)."""
         data = scaler.to_list()
         row = self.spark.createDataFrame([{
             "seq_mean":  str(data["seq_mean"]),
@@ -386,7 +376,6 @@ class DataProcessor:
         print(f"  y_min    : {data['y_min']}")
         print(f"  y_denom  : {data['y_denom']}")
 
-# ─── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     c = Config()
     seed_all(c.random_state)
