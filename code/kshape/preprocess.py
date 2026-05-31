@@ -32,7 +32,6 @@ class Config:
 
     @property
     def required_history_bins(self):
-        # We only need enough history for the 24h rolling mean or the EWMA lookback
         return max(5, self.bins_per_day, self.ewma_lookback)
 
 
@@ -81,6 +80,7 @@ class Preprocess:
             
         cleaned = (
             df.withColumn("_source_file", F.input_file_name())
+            # Select required columns and cast them to appropriate types
             .select(
                 F.col("tpep_pickup_datetime").cast("timestamp").alias("pickup_dt"),
                 F.col("tpep_dropoff_datetime").cast("timestamp").alias("dropoff_dt"),
@@ -92,6 +92,7 @@ class Preprocess:
                 F.col("total_amount").cast("double"),
                 F.col("_source_file"),
             )
+            # Filter out invalid records
             .withColumn("trip_duration_minute", (F.unix_timestamp("dropoff_dt") - F.unix_timestamp("pickup_dt")) / 60.0)
             .filter(F.col("PULocationID").between(c.min_location_id, c.max_location_id))
             .filter(F.col("trip_duration_minute").between(c.min_duration_minute, c.max_duration_minute))
@@ -143,7 +144,9 @@ class Preprocess:
 
     def build_panel(self, df):
         c = self.c
+        # Group data by 30-minute intervals and pickup locations to calculate demand.
         demand = (
+            # Calculate the pickup time bin (every 30 minutes): 10:00, 10:30, 11:00, ...
             df.withColumn(
                 "pickup_bin_30m",
                 F.to_timestamp(
@@ -152,6 +155,7 @@ class Preprocess:
                     )
                 )
             )
+            # Group by the 30-minute bin and location ID, then count the number of pickups.
             .groupBy("pickup_bin_30m", "PULocationID")
             .agg(F.count("*").cast("int").alias("pickup_demand"))
         )
@@ -189,14 +193,19 @@ class Preprocess:
 
         train_days_total = max(1, int((train_end_val - min_ts_val).total_seconds() / 86400))
 
+        # Filter out zones that are not active enough 
+        # having less than c.active_ratio_threshold of training days.
         active = (
             demand.filter(F.col("pickup_bin_30m") <= train_expr)
             .groupBy("PULocationID")
+            # Calculate the number of active days and total demand for each location.
             .agg(
                 F.countDistinct(F.to_date("pickup_bin_30m")).alias("active_days"),
                 F.sum("pickup_demand").alias("total_demand")
             )
+            # Calculate the day coverage (active days / total training days).
             .withColumn("day_coverage", F.col("active_days") / F.lit(train_days_total))
+            # Keep only the zones with day coverage >= 0.05
             .filter(F.col("day_coverage") >= c.active_ratio_threshold)
             .select("PULocationID")
         )
@@ -211,6 +220,7 @@ class Preprocess:
                 f"Lowering active_ratio_threshold in Config may help."
             )
 
+        # Generate all 30-minute bins from the minimum to the maximum timestamp in the dataset.
         bins = self.spark.sql(f"""
             SELECT explode(
                 sequence(
@@ -232,14 +242,19 @@ class Preprocess:
     def engineer(self, df, train_expr, val_expr, min_ts):
         c = self.c
         
+        # Transform timestamp column to time index (0, 1, 2, ...) based on the min_ts
         df = df.withColumn(
             "time_idx",
             ((F.unix_timestamp("pickup_bin_30m") - F.unix_timestamp(F.lit(min_ts).cast("timestamp"))) / (c.bin_minutes * 60)).cast("int")
         )
 
+        # Repartition and sort data by time index in Spark Executor
         df = df.repartition("PULocationID").sortWithinPartitions("time_idx")
 
+        # Window rolling each location, sort by time index
         w = Window.partitionBy("PULocationID").orderBy("time_idx")
+        
+        # Window 24 hours rolling (48 time bins)
         w24 = w.rowsBetween(-c.bins_per_day, -1)
 
         df = (
@@ -248,12 +263,15 @@ class Preprocess:
             .withColumn("day_of_week", ((F.dayofweek("pickup_bin_30m") + 5) % 7).cast("int"))
         )
 
+        # pickup_demand at t-1 (previous time bin)
         df = df.withColumn("demand_t_1", F.lag("pickup_demand", 1).over(w))
 
+        # Average demand in the last 24 hours (48 time bins)
         df = (
             df.withColumn("rolling_mean_24h", F.avg("pickup_demand").over(w24))
         )
 
+        # EWMA 12 steps = 6 hours
         ewma = F.lit(0.0)
         for i in range(1, c.ewma_lookback + 1):
             ewma += (

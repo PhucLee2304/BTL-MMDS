@@ -5,25 +5,19 @@ from tslearn.clustering import KShape
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
+from collections import defaultdict
 
 warnings.filterwarnings("ignore")
 
-# ─── Đường dẫn I/O ────────────────────────────────────────────────────────────
-# Input : weekly profile (zone × slot_in_week, normalized_demand)
-#         từ output của preclustering.py
 PRECLUSTERING_PATH  = "/user/kshape/preclustering"
-# Input : full panel từ preprocess.py để gán nhãn cluster vào toàn bộ splits
 FULL_PANEL_PATH     = "/user/kshape/preprocess"
-# Output: full panel đã được gắn thêm cột cluster_id
 OUTPUT_PATH         = "/user/kshape/clustering"
 
-# ─── Tham số K-Shape ──────────────────────────────────────────────────────────
-N_CLUSTERS   = 8   # số cụm — có thể tinh chỉnh dựa trên silhouette/elbow
+N_CLUSTERS   = 8
 RANDOM_STATE = 42
-N_INIT       = 3   # số lần khởi tạo ngẫu nhiên (lấy kết quả inertia tốt nhất)
-BINS_PER_WEEK = 336  # 7 ngày × 48 bins/ngày (30min/bin)
+N_INIT       = 3
+BINS_PER_WEEK = 336
 
-# ─── SparkSession ─────────────────────────────────────────────────────────────
 spark = (
     SparkSession.builder
     .appName("KShapeClustering")
@@ -33,9 +27,7 @@ spark = (
     .config("spark.sql.adaptive.enabled", "true")
     .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
     .config("spark.sql.adaptive.skewJoin.enabled", "true")
-    # Tắt vectorized reader – đồng bộ với toàn pipeline
     .config("spark.sql.parquet.enableVectorizedReader", "false")
-    # Tăng giới hạn collect về driver cho ma trận 257 × 336 (~0.7 MB)
     .config("spark.driver.maxResultSize", "1g")
     .config("spark.master", "yarn")
     .config("spark.submit.deployMode", "client")
@@ -50,9 +42,6 @@ spark = (
 )
 spark.sparkContext.setLogLevel("ERROR")
 
-# ─── Bước 1: Đọc weekly profile từ preclustering ─────────────────────────────
-# Schema: PULocationID (long), slot_in_week (int), avg_demand (double),
-#         zone_mean (double), zone_std (double), normalized_demand (double)
 print("[STEP 1] Reading preclustering weekly profiles...")
 profile_df = spark.read.parquet(PRECLUSTERING_PATH)
 profile_df.printSchema()
@@ -69,10 +58,10 @@ if n_slots != BINS_PER_WEEK:
 if n_locations < N_CLUSTERS:
     raise ValueError(f"Số zone ({n_locations}) nhỏ hơn N_CLUSTERS={N_CLUSTERS}!")
 
-# ─── Bước 2: Pivot về ma trận [n_zones, 336] trên driver ─────────────────────
-# Ma trận rất nhỏ: 257 × 336 × 8 bytes ≈ 0.7 MB → an toàn để collect về driver.
-# Thu thập theo thứ tự (PULocationID, slot_in_week) để đảm bảo thứ tự cột ổn định.
 print("[STEP 2] Building clustering matrix on driver...")
+
+# LocationProfileMatrix (N_loc, 336)
+# rows = (PULocationID, slot_in_week, normalized_demand)
 rows = (
     profile_df
     .select("PULocationID", "slot_in_week", "normalized_demand")
@@ -80,16 +69,15 @@ rows = (
     .collect()
 )
 
-# Nhóm theo zone
-from collections import defaultdict
+# zone_data[location_id][slot_in_week] = normalized_demand
 zone_data = defaultdict(lambda: np.zeros(BINS_PER_WEEK, dtype=np.float64))
 for r in rows:
     zone_data[int(r["PULocationID"])][int(r["slot_in_week"])] = float(r["normalized_demand"] or 0.0)
 
 loc_ids = sorted(zone_data.keys())
-X_raw   = np.stack([zone_data[loc] for loc in loc_ids])  # shape: [n_zones, 336]
-
-# K-Shape của tslearn yêu cầu shape [n_samples, seq_len, 1]
+# X_raw: (N_loc, 336)
+X_raw   = np.stack([zone_data[loc] for loc in loc_ids])
+# X_kshape: (N_loc, 336, 1)
 X_kshape = X_raw[:, :, np.newaxis]
 
 matrix_cells = X_raw.shape[0] * X_raw.shape[1]
@@ -98,7 +86,6 @@ print(f"  Matrix shape    : {X_raw.shape}")
 print(f"  Matrix cells    : {matrix_cells:,}")
 print(f"  KShape work est : {work_gb:.4f} GB")
 
-# ─── Bước 3: Chạy K-Shape ────────────────────────────────────────────────────
 print(f"[STEP 3] Running K-Shape (k={N_CLUSTERS}, n_init={N_INIT}, seed={RANDOM_STATE})...")
 model = KShape(
     n_clusters=N_CLUSTERS,
@@ -106,18 +93,15 @@ model = KShape(
     n_init=N_INIT,
     verbose=False,
 )
-labels  = model.fit_predict(X_kshape).astype(int)   # shape: [n_zones]
-centers = np.asarray(model.cluster_centers_).squeeze(-1)  # shape: [k, 336]
+labels  = model.fit_predict(X_kshape).astype(int)
+centers = np.asarray(model.cluster_centers_).squeeze(-1)
 
-# In phân phối cluster
 unique_ids, counts = np.unique(labels, return_counts=True)
 print("  Cluster distribution:")
 for cid, cnt in zip(unique_ids, counts):
     pct = cnt / len(labels) * 100
     print(f"    cluster {cid:2d} : {cnt:3d} zones ({pct:.1f}%)")
 
-# ─── Bước 4: Lưu centroid ra HDFS dạng parquet ───────────────────────────────
-# Mỗi hàng: cluster_id, slot_in_week, centroid_value
 print("[STEP 4] Saving cluster centroids to HDFS...")
 centroid_rows = [
     (int(cid), int(slot), float(centers[cid, slot]))
@@ -133,8 +117,6 @@ centroid_df = spark.createDataFrame(centroid_rows, centroid_schema)
 centroid_df.write.mode("overwrite").parquet(OUTPUT_PATH + "/centroids")
 print(f"  Centroids exported: {OUTPUT_PATH}/centroids")
 
-# ─── Bước 5: Gán nhãn cluster vào full panel ─────────────────────────────────
-# assignments: (PULocationID, cluster_id) cho tất cả zones
 print("[STEP 5] Joining cluster labels to full panel...")
 assignment_rows = [(int(loc), int(lbl)) for loc, lbl in zip(loc_ids, labels)]
 assignment_schema = T.StructType([
@@ -143,21 +125,17 @@ assignment_schema = T.StructType([
 ])
 assignments_df = spark.createDataFrame(assignment_rows, assignment_schema)
 
-# Đọc full panel (toàn bộ splits: train / validation / test)
 full_panel = spark.read.parquet(FULL_PANEL_PATH)
 
-# Broadcast assignments vì bảng rất nhỏ (257 rows)
 result = (
     full_panel
     .join(F.broadcast(assignments_df), on="PULocationID", how="left")
     .withColumn("cluster_id", F.col("cluster_id").cast("int"))
 )
 
-# Ghi ra HDFS, phân vùng theo dataset_split để tối ưu đọc downstream
 result.write.mode("overwrite").partitionBy("dataset_split").parquet(OUTPUT_PATH + "/panel")
 print(f"  Panel with cluster labels exported: {OUTPUT_PATH}/panel")
 
-# ─── Bước 6: In metadata tổng kết ────────────────────────────────────────────
 print("=" * 80)
 print("K-SHAPE CLUSTERING DONE")
 print("=" * 80)
@@ -174,7 +152,6 @@ print(f"  matrix_shape         : {list(X_raw.shape)}")
 print(f"  matrix_cells         : {matrix_cells:,}")
 print(f"  estimated_work_gb    : {work_gb:.4f}")
 
-# ─── Dọn dẹp tài nguyên ───────────────────────────────────────────────────────
 try:
     del rows, zone_data, X_raw, X_kshape, centers, labels
     del profile_df, assignments_df, full_panel, result, centroid_df
